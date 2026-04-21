@@ -35,10 +35,14 @@ from data.server_db import init_server_db
 # Create the Flask application instance.
 # __name__ tells Flask where to look for templates and static files.
 app = Flask(__name__)
-
-# Register our API blueprint — this activates all routes defined in routes.py.
-# url_prefix="" means routes are registered as-is (e.g. /api/sync/visit).
 app.register_blueprint(api_bp)
+
+# Initialise database tables on startup
+with app.app_context():
+    try:
+        init_server_db()
+    except Exception as e:
+        print(f"[Startup] DB init warning: {e}")
 
 
 @app.route("/")
