@@ -6,7 +6,8 @@ import os
 from flask import Blueprint, request, jsonify
 from data.server_db import (
     upsert_visit, upsert_checkout, upsert_passenger,
-    get_active_visits_server, get_visit_history_server, get_stats_server
+    get_active_visits_server, get_visit_history_server,
+    get_stats_server, init_server_db
 )
 
 api_bp = Blueprint("api", __name__)
@@ -25,11 +26,32 @@ def _check_api_key() -> bool:
 # ── HEALTH CHECK — no API key required ────────────────────────────────────
 @api_bp.route("/api/health", methods=["GET"])
 def health():
-    """
-    Simple ping — no API key needed.
-    The desktop SyncEngine calls this to check if server is reachable.
-    """
     return jsonify({"status": "ok", "message": "Server is running"}), 200
+
+
+# ── DEBUG ENDPOINT — shows what key the server expects (remove after testing)
+@api_bp.route("/api/debug", methods=["GET"])
+def debug():
+    """
+    Temporary debug endpoint — shows server config without revealing full key.
+    Visit this in your browser to confirm setup is correct.
+    """
+    # Try to initialise tables in case they don't exist
+    try:
+        init_server_db()
+        db_status = "tables ready"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    key_set    = API_SECRET_KEY != "change-this-to-a-long-random-string-before-deploying"
+    key_prefix = API_SECRET_KEY[:6] + "..." if len(API_SECRET_KEY) > 6 else "NOT SET"
+
+    return jsonify({
+        "api_key_configured": key_set,
+        "api_key_prefix":     key_prefix,
+        "database_status":    db_status,
+        "hint": "Make sure your desktop config.py API_SECRET_KEY matches api_key_prefix"
+    }), 200
 
 
 # ── SYNC ENDPOINTS ─────────────────────────────────────────────────────────
@@ -37,6 +59,10 @@ def health():
 @api_bp.route("/api/sync/visit", methods=["POST"])
 def sync_visit():
     if not _check_api_key():
+        # Log what key was received vs expected to help debug
+        received = request.headers.get("X-API-Key", "MISSING")
+        print(f"[Auth] REJECTED. Received key prefix: {received[:6]}... "
+              f"Expected prefix: {API_SECRET_KEY[:6]}...")
         return jsonify({"error": "Unauthorized — wrong API key"}), 401
 
     data = request.get_json()
@@ -50,9 +76,10 @@ def sync_visit():
 
     success = upsert_visit(data)
     if success:
+        print(f"[Sync] Visit saved: {data['full_name']} | {data['log_uuid'][:8]}")
         return jsonify({"status": "saved", "log_uuid": data["log_uuid"]}), 201
     else:
-        return jsonify({"error": "Database error"}), 500
+        return jsonify({"error": "Database error — check Railway logs"}), 500
 
 
 @api_bp.route("/api/sync/checkout", methods=["POST"])
