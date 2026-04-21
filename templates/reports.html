@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTS — Visit Reports</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1A1A2E;
+            color: #EAEAEA;
+            min-height: 100vh;
+        }
+
+        .topbar {
+            background: #16213E;
+            border-bottom: 1px solid #2A2A4A;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .topbar h1 { font-size: 18px; color: #E94560; font-weight: 700; }
+
+        .topbar .guard-info { font-size: 13px; color: #2ECC71; }
+
+        .logout {
+            background: #0F3460;
+            color: #EAEAEA;
+            border: none;
+            padding: 7px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            margin-left: 16px;
+        }
+
+        .navbar {
+            background: #16213E;
+            border-bottom: 1px solid #2A2A4A;
+            padding: 8px 24px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .navbar a {
+            padding: 6px 16px;
+            border-radius: 5px;
+            font-size: 13px;
+            text-decoration: none;
+            color: #EAEAEA;
+            background: #0F3460;
+        }
+
+        .navbar a.active { background: #E94560; }
+        .navbar a:hover  { background: #2A2A4A; }
+
+        .content { padding: 24px; }
+
+        /* Stats cards */
+        .stats-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: #0F3460;
+            border: 1px solid #2A2A4A;
+            border-radius: 8px;
+            padding: 16px 24px;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #E94560;
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: #A0A0B0;
+            margin-top: 4px;
+        }
+
+        /* Filters */
+        .filters {
+            background: #16213E;
+            border: 1px solid #2A2A4A;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 16px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .filters label {
+            display: block;
+            font-size: 12px;
+            color: #A0A0B0;
+            margin-bottom: 4px;
+        }
+
+        .filters select,
+        .filters input {
+            padding: 8px 12px;
+            background: #0F3460;
+            border: 1px solid #2A2A4A;
+            border-radius: 5px;
+            color: #EAEAEA;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .filter-btn {
+            padding: 8px 20px;
+            background: #E94560;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .filter-btn:hover { background: #C73652; }
+
+        .clear-btn {
+            padding: 8px 16px;
+            background: #0F3460;
+            color: #EAEAEA;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+        }
+
+        /* Table */
+        .table-wrap {
+            background: #16213E;
+            border: 1px solid #2A2A4A;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            background: #0F3460;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 12px;
+            color: #A0A0B0;
+            font-weight: 600;
+            border-bottom: 1px solid #2A2A4A;
+            white-space: nowrap;
+        }
+
+        tbody tr { border-bottom: 1px solid #2A2A4A; }
+        tbody tr:nth-child(even) { background: #16213E; }
+        tbody tr:nth-child(odd)  { background: #1A1A2E; }
+        tbody tr:hover           { background: #0F3460; }
+        tbody td { padding: 10px 12px; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-guest       { background: #1a3a5c; color: #5dade2; }
+        .badge-delivery    { background: #3a2a0a; color: #F39C12; }
+        .badge-maintenance { background: #1a3a1a; color: #2ECC71; }
+
+        .no-data {
+            padding: 48px;
+            text-align: center;
+            color: #A0A0B0;
+        }
+
+        .record-count {
+            padding: 10px 16px;
+            font-size: 12px;
+            color: #A0A0B0;
+            background: #0F3460;
+            border-top: 1px solid #2A2A4A;
+        }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <h1>🛡 Digital Visitor Tracking System</h1>
+    <div style="display:flex; align-items:center; gap:16px;">
+        <span class="guard-info">👮 {{ session.guard_name }}</span>
+        <a href="/logout" class="logout">🔒 Logout</a>
+    </div>
+</div>
+
+<div class="navbar">
+    <a href="/dashboard">🏠 Dashboard</a>
+    <a href="/reports" class="active">📊 Visit Reports</a>
+</div>
+
+<div class="content">
+
+    <!-- STATS -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="value">{{ stats.total }}</div>
+            <div class="label">Total Visits</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" style="color:#2ECC71;">{{ stats.today }}</div>
+            <div class="label">Today</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" style="color:#F39C12;">{{ stats.active }}</div>
+            <div class="label">Currently Active</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" style="color:#5dade2;">{{ stats.by_category.get('Guest', 0) }}</div>
+            <div class="label">Guests</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" style="color:#F39C12;">{{ stats.by_category.get('Delivery', 0) }}</div>
+            <div class="label">Deliveries</div>
+        </div>
+        <div class="stat-card">
+            <div class="value" style="color:#2ECC71;">{{ stats.by_category.get('Maintenance', 0) }}</div>
+            <div class="label">Maintenance</div>
+        </div>
+    </div>
+
+    <!-- FILTERS -->
+    <form method="GET" action="/reports">
+        <div class="filters">
+            <div>
+                <label>Category</label>
+                <select name="category">
+                    <option value="">All</option>
+                    <option value="Guest"       {{ 'selected' if request.args.get('category')=='Guest' }}>Guest</option>
+                    <option value="Delivery"    {{ 'selected' if request.args.get('category')=='Delivery' }}>Delivery</option>
+                    <option value="Maintenance" {{ 'selected' if request.args.get('category')=='Maintenance' }}>Maintenance</option>
+                </select>
+            </div>
+            <div>
+                <label>From (YYYY-MM-DD)</label>
+                <input type="text" name="date_from" placeholder="2026-01-01"
+                       value="{{ request.args.get('date_from', '') }}">
+            </div>
+            <div>
+                <label>To (YYYY-MM-DD)</label>
+                <input type="text" name="date_to" placeholder="2026-12-31"
+                       value="{{ request.args.get('date_to', '') }}">
+            </div>
+            <button type="submit" class="filter-btn">🔍 Filter</button>
+            <a href="/reports" class="clear-btn">Clear</a>
+        </div>
+    </form>
+
+    <!-- HISTORY TABLE -->
+    <div class="table-wrap">
+        {% if history %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>National ID</th>
+                    <th>Category</th>
+                    <th>Pax</th>
+                    <th>Check-In</th>
+                    <th>Check-Out</th>
+                    <th>Duration</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in history %}
+                <tr>
+                    <td>{{ r.full_name }}</td>
+                    <td>{{ r.national_id or '—' }}</td>
+                    <td>
+                        <span class="badge badge-{{ r.category|lower }}">
+                            {{ r.category }}
+                        </span>
+                    </td>
+                    <td style="text-align:center;">{{ r.pax_count }}</td>
+                    <td>{{ r.check_in_display }}</td>
+                    <td>{{ r.check_out_display }}</td>
+                    <td>{{ r.duration }}</td>
+                    <td>{{ '⚠ NO-ID' if r.exception_flag else '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="record-count">{{ history|length }} record(s) shown</div>
+        {% else %}
+        <div class="no-data">No completed visits found.</div>
+        {% endif %}
+    </div>
+
+</div>
+</body>
+</html>

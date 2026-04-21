@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTS — Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1A1A2E;
+            color: #EAEAEA;
+            min-height: 100vh;
+        }
+
+        /* ── TOP BAR ── */
+        .topbar {
+            background: #16213E;
+            border-bottom: 1px solid #2A2A4A;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .topbar h1 {
+            font-size: 18px;
+            color: #E94560;
+            font-weight: 700;
+        }
+
+        .topbar .guard-info {
+            font-size: 13px;
+            color: #2ECC71;
+        }
+
+        .topbar .logout {
+            background: #0F3460;
+            color: #EAEAEA;
+            border: none;
+            padding: 7px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            margin-left: 16px;
+        }
+
+        .topbar .logout:hover { background: #2A2A4A; }
+
+        /* ── NAV BAR ── */
+        .navbar {
+            background: #16213E;
+            border-bottom: 1px solid #2A2A4A;
+            padding: 8px 24px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .navbar a {
+            padding: 6px 16px;
+            border-radius: 5px;
+            font-size: 13px;
+            text-decoration: none;
+            color: #EAEAEA;
+            background: #0F3460;
+        }
+
+        .navbar a.active { background: #E94560; }
+        .navbar a:hover  { background: #2A2A4A; }
+
+        /* ── MAIN LAYOUT ── */
+        .main {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 0;
+            height: calc(100vh - 100px);
+        }
+
+        /* ── LEFT PANEL — CHECK-IN FORM ── */
+        .left-panel {
+            background: #16213E;
+            border-right: 1px solid #2A2A4A;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .panel-header {
+            background: #0F3460;
+            padding: 12px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #E94560;
+            border-bottom: 1px solid #2A2A4A;
+        }
+
+        .form-body { padding: 16px; }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #F39C12;
+            margin: 16px 0 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #2A2A4A;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            color: #A0A0B0;
+            margin-bottom: 4px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        select {
+            width: 100%;
+            padding: 9px 12px;
+            background: #0F3460;
+            border: 1px solid #2A2A4A;
+            border-radius: 5px;
+            color: #EAEAEA;
+            font-size: 13px;
+            margin-bottom: 12px;
+            outline: none;
+        }
+
+        input:focus, select:focus { border-color: #E94560; }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .checkbox-row input[type="checkbox"] {
+            width: 16px; height: 16px;
+            accent-color: #E94560;
+            margin: 0;
+        }
+
+        .hidden { display: none; }
+
+        .submit-btn {
+            width: 100%;
+            padding: 13px;
+            background: #E94560;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .submit-btn:hover { background: #C73652; }
+
+        /* ── RIGHT PANEL — OCCUPANCY TABLE ── */
+        .right-panel {
+            background: #1A1A2E;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .right-header {
+            background: #0F3460;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #2A2A4A;
+        }
+
+        .right-header h2 {
+            font-size: 13px;
+            font-weight: 700;
+            color: #2ECC71;
+        }
+
+        .right-header .count {
+            font-size: 12px;
+            color: #A0A0B0;
+        }
+
+        .legend {
+            padding: 8px 16px;
+            font-size: 11px;
+            color: #A0A0B0;
+            background: #16213E;
+            border-bottom: 1px solid #2A2A4A;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        thead th {
+            background: #0F3460;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 12px;
+            color: #A0A0B0;
+            font-weight: 600;
+            border-bottom: 1px solid #2A2A4A;
+            white-space: nowrap;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #2A2A4A;
+        }
+
+        tbody tr:nth-child(even) { background: #16213E; }
+        tbody tr:nth-child(odd)  { background: #1A1A2E; }
+        tbody tr.overdue         { background: #4A0A0A; color: #FF6B6B; }
+        tbody tr:hover           { background: #0F3460; }
+
+        tbody td {
+            padding: 10px 12px;
+            vertical-align: middle;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-guest       { background: #1a3a5c; color: #5dade2; }
+        .badge-delivery    { background: #3a2a0a; color: #F39C12; }
+        .badge-maintenance { background: #1a3a1a; color: #2ECC71; }
+
+        .checkout-btn {
+            background: #E94560;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .checkout-btn:hover { background: #C73652; }
+
+        .no-visitors {
+            padding: 48px;
+            text-align: center;
+            color: #A0A0B0;
+            font-size: 14px;
+        }
+
+        /* ── FLASH MESSAGES ── */
+        .flash {
+            padding: 12px 24px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .flash.success {
+            background: #0a3a1a;
+            color: #2ECC71;
+            border-bottom: 1px solid #2ECC71;
+        }
+
+        .flash.error {
+            background: #4A0A0A;
+            color: #FF6B6B;
+            border-bottom: 1px solid #E74C3C;
+        }
+
+        /* ── ACTION BAR ── */
+        .action-bar {
+            padding: 10px 16px;
+            background: #16213E;
+            border-top: 1px solid #2A2A4A;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .refresh-btn {
+            background: #0F3460;
+            color: #EAEAEA;
+            border: none;
+            padding: 7px 14px;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .refresh-btn:hover { background: #2A2A4A; }
+
+        .status-text {
+            font-size: 12px;
+            color: #A0A0B0;
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+    <h1>🛡 Digital Visitor Tracking System</h1>
+    <div style="display:flex; align-items:center; gap:16px;">
+        <span class="guard-info">👮 {{ session.guard_name }}</span>
+        <a href="/logout" class="logout">🔒 Logout</a>
+    </div>
+</div>
+
+<!-- NAV BAR -->
+<div class="navbar">
+    <a href="/dashboard" class="active">🏠 Dashboard</a>
+    <a href="/reports">📊 Visit Reports</a>
+</div>
+
+<!-- FLASH MESSAGES -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+{% endwith %}
+
+<!-- MAIN CONTENT -->
+<div class="main">
+
+    <!-- LEFT: CHECK-IN FORM -->
+    <div class="left-panel">
+        <div class="panel-header">➕ ADD VISITOR</div>
+        <div class="form-body">
+            <form method="POST" action="/checkin">
+
+                <!-- SECTION A -->
+                <div class="section-title">A — Primary Details</div>
+
+                <label>Full Name *</label>
+                <input type="text" name="full_name" placeholder="Enter full name" required>
+
+                <label>National ID *</label>
+                <input type="text" name="national_id" id="national_id" placeholder="Enter national ID">
+
+                <label>Phone Number</label>
+                <input type="text" name="phone_number" placeholder="e.g. 0712345678">
+
+                <label>Vehicle Plate</label>
+                <input type="text" name="vehicle_plate" placeholder="e.g. KCA 001A">
+
+                <label>Category *</label>
+                <select name="category" required>
+                    <option value="">— Select category —</option>
+                    <option value="Guest">Guest</option>
+                    <option value="Delivery">Delivery</option>
+                    <option value="Maintenance">Maintenance</option>
+                </select>
+
+                <!-- SECTION B -->
+                <div class="section-title">B — Zero-Trust Exception</div>
+
+                <label class="checkbox-row">
+                    <input type="checkbox" id="no_id_check" name="no_id" onchange="toggleNoId(this)">
+                    Visitor has NO ID
+                </label>
+
+                <div id="pin_section" class="hidden">
+                    <label>Host Secret PIN *</label>
+                    <input type="password" name="host_pin" id="host_pin" placeholder="Enter host PIN">
+                </div>
+
+                <!-- SECTION C -->
+                <div class="section-title">C — Group Check-In</div>
+
+                <label class="checkbox-row">
+                    <input type="checkbox" id="multi_pax" name="multi_pax" onchange="togglePax(this)">
+                    Multiple Passengers
+                </label>
+
+                <div id="pax_section" class="hidden">
+                    <label>Number of Extra Passengers</label>
+                    <select id="pax_count" name="pax_count" onchange="buildPaxFields(this.value)">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+                    <div id="pax_fields"></div>
+                </div>
+
+                <button type="submit" class="submit-btn">🔒 SECURE CHECK-IN</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- RIGHT: ACTIVE OCCUPANCY -->
+    <div class="right-panel">
+        <div class="right-header">
+            <h2>📋 ACTIVE OCCUPANCY</h2>
+            <span class="count">{{ visits|length }} on premises</span>
+        </div>
+        <div class="legend">
+            🔴 Red row = Delivery OVERDUE (&gt;20 min) &nbsp;|&nbsp; ⚠ = Zero-Trust / No-ID entry
+        </div>
+
+        {% if visits %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Pax</th>
+                    <th>Plate</th>
+                    <th>Entry Time</th>
+                    <th>Duration</th>
+                    <th>Note</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in visits %}
+                <tr class="{{ 'overdue' if v.overdue else '' }}">
+                    <td>{{ v.full_name }}</td>
+                    <td>
+                        <span class="badge badge-{{ v.category|lower }}">
+                            {{ v.category }}
+                        </span>
+                    </td>
+                    <td style="text-align:center;">{{ v.pax_count }}</td>
+                    <td>{{ v.vehicle_plate or '—' }}</td>
+                    <td>{{ v.entry_display }}</td>
+                    <td>{{ v.duration }}</td>
+                    <td>
+                        {% if v.overdue %}🔴 OVERDUE
+                        {% elif v.exception_flag %}⚠ NO-ID
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="/checkout"
+                              onsubmit="return confirm('Check out {{ v.full_name }}?')">
+                            <input type="hidden" name="log_uuid" value="{{ v.local_uuid }}">
+                            <button type="submit" class="checkout-btn">✅ Check Out</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="no-visitors">
+            No visitors currently on premises.
+        </div>
+        {% endif %}
+
+        <div class="action-bar">
+            <a href="/dashboard" class="refresh-btn">🔄 Refresh</a>
+            <span class="status-text">Auto-refreshes on page load</span>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function toggleNoId(cb) {
+        var pinSection  = document.getElementById('pin_section');
+        var nidField    = document.getElementById('national_id');
+        if (cb.checked) {
+            pinSection.classList.remove('hidden');
+            nidField.removeAttribute('required');
+            nidField.disabled = true;
+        } else {
+            pinSection.classList.add('hidden');
+            nidField.disabled = false;
+        }
+    }
+
+    function togglePax(cb) {
+        var paxSection = document.getElementById('pax_section');
+        if (cb.checked) {
+            paxSection.classList.remove('hidden');
+            buildPaxFields(1);
+        } else {
+            paxSection.classList.add('hidden');
+            document.getElementById('pax_fields').innerHTML = '';
+        }
+    }
+
+    function buildPaxFields(count) {
+        var container = document.getElementById('pax_fields');
+        container.innerHTML = '';
+        for (var i = 1; i <= count; i++) {
+            var label = document.createElement('label');
+            label.textContent = 'Passenger ' + i + ' — National ID *';
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.name = 'passenger_id_' + i;
+            input.placeholder = 'National ID';
+            input.required = true;
+            container.appendChild(label);
+            container.appendChild(input);
+        }
+    }
+</script>
+
+</body>
+</html>

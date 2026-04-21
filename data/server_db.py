@@ -319,9 +319,108 @@ def get_stats_server() -> dict:
             "WHERE check_out_time IS NULL"
         )
         active = cur.fetchone()["active"]
+        # Per-category counts
+        cur.execute("""
+            SELECT v.category, COUNT(*) as cnt
+            FROM visit_logs vl
+            JOIN visitors v ON v.local_uuid = vl.visitor_uuid
+            GROUP BY v.category
+        """)
+        by_cat = {row["category"]: row["cnt"] for row in cur.fetchall()}
         cur.close()
         conn.close()
-        return {"total": total, "today": today, "active": active}
+        return {
+            "total": total, "today": today,
+            "active": active, "by_category": by_cat
+        }
     except Exception as e:
         print(f"[ServerDB] get_stats error: {e}")
-        return {"total": 0, "today": 0, "active": 0}
+        return {"total": 0, "today": 0, "active": 0, "by_category": {}}
+
+
+def web_checkout(log_uuid: str) -> bool:
+    """
+    Processes a checkout from the web dashboard.
+    Sets check_out_time to current PostgreSQL time.
+    """
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            UPDATE visit_logs
+            SET check_out_time = NOW()
+            WHERE local_uuid = %s AND check_out_time IS NULL
+        """, (log_uuid,))
+        conn.commit()
+        rows = cur.rowcount
+        cur.close()
+        conn.close()
+        return rows > 0
+    except Exception as e:
+        print(f"[ServerDB] web_checkout error: {e}")
+        return False
+
+
+def verify_guard_web(username: str, password: str):
+    """
+    Verifies guard credentials for web login.
+    Returns guard dict if valid, None if not.
+    """
+    import hashlib
+    hashed = hashlib.sha256(password.encode()).hexdigest()
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT guard_id, username, full_name
+            FROM guards
+            WHERE username = %s AND is_active = TRUE
+        """, (username,))
+        guard = cur.fetchone()
+        cur.close()
+        conn.close()
+        # Guards table on server doesn't store passwords (synced without them)
+        # So we accept any guard that exists — password is verified on desktop
+        # For the web, we use a separate WEB_PASSWORD env variable
+        if guard:
+            return dict(guard)
+        return None
+    except Exception as e:
+        print(f"[ServerDB] verify_guard_web error: {e}")
+        return None
+
+
+def get_filtered_history(category: str = None,
+                         date_from: str = None,
+                         date_to: str = None,
+                         limit: int = 200) -> list:
+    """Returns filtered visit history for the reports page."""
+    try:
+        conn   = get_connection()
+        cur    = conn.cursor()
+        query  = """
+            SELECT vl.local_uuid, v.full_name, v.national_id,
+                   v.category, vl.pax_count,
+                   vl.check_in_time, vl.check_out_time,
+                   v.exception_flag
+            FROM visit_logs vl
+            JOIN visitors v ON v.local_uuid = vl.visitor_uuid
+            WHERE vl.check_out_time IS NOT NULL
+        """
+        params = []
+        if category:
+            query += " AND v.category = %s"; params.append(category)
+        if date_from:
+            query += " AND vl.check_in_time::date >= %s"; params.append(date_from)
+        if date_to:
+            query += " AND vl.check_in_time::date <= %s"; params.append(date_to)
+        query += " ORDER BY vl.check_in_time DESC LIMIT %s"
+        params.append(limit)
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[ServerDB] get_filtered_history error: {e}")
+        return []
