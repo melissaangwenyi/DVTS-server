@@ -1,0 +1,28 @@
+# =============================================================================
+# server/requirements.txt  —  Python Libraries Required on the Server
+# Location: server/requirements.txt
+#
+# PURPOSE:
+#   When you deploy to Railway, it reads this file and installs every
+#   library listed here automatically. Think of it as a shopping list
+#   that Railway uses to set up the server environment.
+#
+# HOW TO READ THIS FILE:
+#   library-name==version-number
+#   The == pins the exact version so the server always uses the same
+#   version you tested with — preventing "it worked on my machine" problems.
+#
+# HOW TO INSTALL LOCALLY (for testing on your own computer):
+#   pip install -r requirements.txt
+# =============================================================================
+
+# Flask — the web framework that runs our API server
+flask==3.0.3
+
+# gunicorn — a production web server that Railway uses to run Flask
+# (Flask's built-in server is for development only — not safe for production)
+gunicorn==22.0.0
+
+# psycopg2-binary — the Python driver for PostgreSQL
+# "binary" means it includes compiled C extensions — no extra setup needed
+psycopg2-binary==2.9.9
