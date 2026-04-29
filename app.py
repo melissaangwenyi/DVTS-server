@@ -20,8 +20,15 @@ import os
 import sys
 import uuid
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from functools import wraps
+
+# Nairobi is UTC+3 — all timestamps stored and displayed in EAT
+EAT = timezone(timedelta(hours=3))
+
+def now_eat():
+    """Returns the current Nairobi time as a naive datetime string."""
+    return datetime.now(EAT).strftime("%Y-%m-%d %H:%M:%S")
 
 from flask import (Flask, render_template, request, redirect,
                    url_for, session, flash, jsonify)
@@ -90,7 +97,7 @@ def duration_str(check_in_str, check_out_str=None):
     try:
         fmt = "%Y-%m-%d %H:%M:%S"
         ci  = datetime.strptime(str(check_in_str)[:19], fmt)
-        end = datetime.strptime(str(check_out_str)[:19], fmt) if check_out_str else datetime.utcnow()
+        end = datetime.strptime(str(check_out_str)[:19], fmt) if check_out_str else datetime.now(EAT).replace(tzinfo=None)
         mins = (end - ci).total_seconds() / 60
         if mins < 60:
             return f"{int(mins)}m"
@@ -110,7 +117,7 @@ def is_overdue(category, check_in_str, estimated_minutes=None):
     try:
         fmt = "%Y-%m-%d %H:%M:%S"
         ci  = datetime.strptime(str(check_in_str)[:19], fmt)
-        mins_passed = (datetime.utcnow() - ci).total_seconds() / 60
+        mins_passed = (datetime.now(EAT).replace(tzinfo=None) - ci).total_seconds() / 60
         if category == "Delivery":
             return mins_passed > 20
         if estimated_minutes:
@@ -235,10 +242,10 @@ def checkin():
             if pid:
                 passenger_ids.append(pid)
 
-    # Build UUIDs and timestamp
+    # Build UUIDs and timestamp in Nairobi time (EAT = UTC+3)
     visitor_uuid = str(uuid.uuid4())
     log_uuid     = str(uuid.uuid4())
-    now_str      = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now_str      = now_eat()
     total_pax    = 1 + pax_count_extra if multi_pax else 1
 
     data = {

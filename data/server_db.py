@@ -408,14 +408,18 @@ def get_stats_server() -> dict:
 
 
 def web_checkout(log_uuid: str) -> bool:
+    """Stamps checkout in Nairobi time (EAT = UTC+3)."""
+    from datetime import datetime, timezone, timedelta
+    eat = timezone(timedelta(hours=3))
+    now_eat = datetime.now(eat).strftime("%Y-%m-%d %H:%M:%S")
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
             UPDATE visit_logs
-            SET check_out_time = NOW()
+            SET check_out_time = %s
             WHERE local_uuid = %s AND check_out_time IS NULL
-        """, (log_uuid,))
+        """, (now_eat, log_uuid))
         conn.commit()
         rows = cur.rowcount
         cur.close()
@@ -578,7 +582,7 @@ def update_resident_server(resident_id: int, full_name: str,
         cur  = conn.cursor()
         cur.execute("""
             UPDATE residents
-            SET full_name=%, unit_number=%s, phone=%s
+            SET full_name=%s, unit_number=%s, phone=%s
             WHERE resident_id=%s
         """, (full_name, unit_number, phone or None, resident_id))
         conn.commit()
