@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manage Residents</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1A1A2E; color: #EAEAEA; margin:0; }
+        .topbar, .navbar { background: #0F3460; padding: 12px 24px; border-bottom: 1px solid #2A2A4A; }
+        .navbar a { padding: 6px 16px; margin-right: 8px; text-decoration: none; color: white; background: #16213E; border-radius: 5px;}
+        .navbar a.active { background: #E94560; }
+        .main { display: grid; grid-template-columns: 1fr 300px; gap: 20px; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; background: #16213E; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #2A2A4A; }
+        th { background: #0F3460; }
+        .form-panel { background: #16213E; padding: 20px; border-radius: 8px; }
+        input { width: 100%; padding: 8px; margin-bottom: 10px; background: #0F3460; color: white; border: 1px solid #2A2A4A; }
+        button { width: 100%; padding: 10px; background: #E94560; color: white; border: none; cursor: pointer; border-radius: 5px;}
+        button:hover { background: #C73652; }
+        .flash { padding: 10px; margin: 10px 20px; border-radius: 5px; }
+        .success { background: #0a3a1a; color: #2ECC71; }
+        .error { background: #4A0A0A; color: #FF6B6B; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>🏡 Manage Residents</h1>
+    </div>
+    <div class="navbar">
+        <a href="/dashboard">🏠 Dashboard</a>
+        <a href="/reports">📊 Visit Reports</a>
+        <a href="/manage-guards">👮 Manage Guards</a>
+        <a href="/manage-residents" class="active">🏡 Manage Residents</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+    {% endwith %}
+
+    <div class="main">
+        <div>
+            <h2>Registered Residents</h2>
+            <table>
+                <tr>
+                    <th>Full Name</th>
+                    <th>Unit Number</th>
+                    <th>Host PIN</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+                {% for resident in residents %}
+                <tr>
+                    <td>{{ resident.full_name }}</td>
+                    <td>{{ resident.unit_number }}</td>
+                    <td>{{ resident.host_pin }}</td>
+                    <td>{{ resident.phone }}</td>
+                    <td>{{ 'Active' if resident.is_active else 'Inactive' }}</td>
+                    <td>
+                        <form action="/manage-residents/toggle/{{ resident.resident_id }}" method="POST" style="display:inline;">
+                            <button type="submit" style="padding: 5px; width: auto; background: #2ECC71;">Toggle</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        <div class="form-panel">
+            <h2>Add New Resident</h2>
+            <form method="POST" action="/manage-residents/add">
+                <label>Full Name *</label>
+                <input type="text" name="full_name" required>
+                
+                <label>Unit Number *</label>
+                <input type="text" name="unit_number" required>
+
+                <label>Host PIN (For Zero-Trust Check-in) *</label>
+                <input type="text" name="host_pin" required>
+
+                <label>Phone Number</label>
+                <input type="text" name="phone">
+
+                <button type="submit">➕ Add Resident</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
