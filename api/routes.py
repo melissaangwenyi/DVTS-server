@@ -1,5 +1,10 @@
 """
 server/api/routes.py — Flask API Endpoints
+
+CHANGES IN THIS VERSION:
+  - /api/pull/visits (GET): NEW endpoint — the desktop SyncEngine calls this
+    to download visits that were created on the web dashboard so they appear
+    in the local SQLite database too (two-way sync).
 """
 
 import os
@@ -7,7 +12,7 @@ from flask import Blueprint, request, jsonify
 from data.server_db import (
     upsert_visit, upsert_checkout, upsert_passenger,
     get_active_visits_server, get_visit_history_server,
-    get_stats_server, init_server_db
+    get_stats_server, init_server_db, get_visits_for_pull
 )
 
 api_bp = Blueprint("api", __name__)
@@ -29,14 +34,9 @@ def health():
     return jsonify({"status": "ok", "message": "Server is running"}), 200
 
 
-# ── DEBUG ENDPOINT — shows what key the server expects (remove after testing)
+# ── DEBUG ENDPOINT ─────────────────────────────────────────────────────────
 @api_bp.route("/api/debug", methods=["GET"])
 def debug():
-    """
-    Temporary debug endpoint — shows server config without revealing full key.
-    Visit this in your browser to confirm setup is correct.
-    """
-    # Try to initialise tables in case they don't exist
     try:
         init_server_db()
         db_status = "tables ready"
@@ -54,12 +54,11 @@ def debug():
     }), 200
 
 
-# ── SYNC ENDPOINTS ─────────────────────────────────────────────────────────
+# ── SYNC PUSH ENDPOINTS (desktop → server) ────────────────────────────────
 
 @api_bp.route("/api/sync/visit", methods=["POST"])
 def sync_visit():
     if not _check_api_key():
-        # Log what key was received vs expected to help debug
         received = request.headers.get("X-API-Key", "MISSING")
         print(f"[Auth] REJECTED. Received key prefix: {received[:6]}... "
               f"Expected prefix: {API_SECRET_KEY[:6]}...")
@@ -118,6 +117,30 @@ def sync_passenger():
         return jsonify({"status": "saved"}), 201
     else:
         return jsonify({"error": "Database error"}), 500
+
+
+# ── PULL ENDPOINT (server → desktop, two-way sync) ─────────────────────────
+
+@api_bp.route("/api/pull/visits", methods=["GET"])
+def pull_visits():
+    """
+    Desktop SyncEngine calls this GET endpoint to download visits that were
+    created on the web dashboard so they appear in the local SQLite DB too.
+
+    Query param: ?since=2026-04-15+12:00:00  (optional)
+      If provided, only visits newer than this timestamp are returned.
+      The desktop passes its most recent known check_in_time so it only
+      downloads new records, not the entire history every cycle.
+
+    Returns JSON:
+      { "visits": [ { log_uuid, visitor_uuid, full_name, ... }, ... ] }
+    """
+    if not _check_api_key():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    since = request.args.get("since", None)
+    visits = get_visits_for_pull(since=since)
+    return jsonify({"visits": visits, "count": len(visits)}), 200
 
 
 # ── DASHBOARD READ ENDPOINTS ───────────────────────────────────────────────
