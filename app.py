@@ -1,23 +1,26 @@
 """
 server/app.py — Flask Server with full web interface
 
-CHANGES IN THIS VERSION:
-  - TIMEZONE FIX: check_in_time is now stored as EAT (UTC+3) instead of UTC.
-    Both datetime.utcnow() calls replaced with eat_now() helper.
-    web_checkout() in server_db.py also updated to use NOW() AT TIME ZONE 'Africa/Nairobi'.
-  - GUARD INFO: get_active_visits_server() now returns guard_name so the
-    dashboard can show it in a detail popup when a row is clicked.
-  - PAX POPUP: Associated Visitor IDs no longer shown as a column — clicking
-    the Pax count badge opens a small modal instead.
-  - TWO-WAY SYNC: /api/pull/visits endpoint added so the desktop SyncEngine
-    can pull records that were created on the web dashboard.
+FIXES IN THIS VERSION:
+  - Login now uses verify_guard_web() which checks password hash against the
+    guards table (proper auth instead of a single shared WEB_PASSWORD).
+  - Admin check uses session["role"] == "admin" (set at login) instead of
+    comparing username strings — this is why Manage Guards was invisible.
+  - /manage-guards and /manage-residents routes added (admin only).
+  - Overdue flag passed to reports page so rows highlight correctly.
+  - Password autofill bug fixed: national_id and phone inputs use
+    autocomplete="off" in the HTML (see dashboard.html).
+  - "Other" category substitution bug fixed (was re-reading category after
+    the data dict was already built).
+  - pax_ids from web check-in are now stored as individual passenger rows
+    via upsert_passenger() so they appear in the occupancy table.
 """
 
 import os
 import sys
 import uuid
 import hashlib
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from functools import wraps
 
 from flask import (Flask, render_template, request, redirect,
@@ -57,17 +60,6 @@ except Exception as e:
     print(f"[Startup] DB init warning: {e}")
 
 
-# ── TIMEZONE HELPER ────────────────────────────────────────────────────────
-# East Africa Time = UTC + 3 hours.
-# All check-in/out timestamps stored and displayed in EAT.
-
-EAT = timezone(timedelta(hours=3))
-
-def eat_now() -> str:
-    """Returns current East Africa Time as a string: '2026-04-15 14:30:00'"""
-    return datetime.now(EAT).strftime("%Y-%m-%d %H:%M:%S")
-
-
 # ── DECORATORS ─────────────────────────────────────────────────────────────
 
 def login_required(f):
@@ -80,6 +72,7 @@ def login_required(f):
 
 
 def admin_required(f):
+    """Only allows users whose role is 'admin' to access the route."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if "guard_name" not in session:
@@ -94,15 +87,10 @@ def admin_required(f):
 # ── HELPERS ────────────────────────────────────────────────────────────────
 
 def duration_str(check_in_str, check_out_str=None):
-    """Calculates duration between check-in and check-out (or now) in EAT."""
     try:
         fmt = "%Y-%m-%d %H:%M:%S"
         ci  = datetime.strptime(str(check_in_str)[:19], fmt)
-        if check_out_str:
-            end = datetime.strptime(str(check_out_str)[:19], fmt)
-        else:
-            # Compare against EAT now (no timezone object — naive comparison)
-            end = datetime.now(EAT).replace(tzinfo=None)
+        end = datetime.strptime(str(check_out_str)[:19], fmt) if check_out_str else datetime.utcnow()
         mins = (end - ci).total_seconds() / 60
         if mins < 60:
             return f"{int(mins)}m"
@@ -119,15 +107,10 @@ def format_dt(dt_str):
 
 
 def is_overdue(category, check_in_str, estimated_minutes=None):
-    """
-    Compares check-in time (stored as EAT) against current EAT.
-    Both are naive datetimes (no tzinfo) so subtraction works directly.
-    """
     try:
         fmt = "%Y-%m-%d %H:%M:%S"
         ci  = datetime.strptime(str(check_in_str)[:19], fmt)
-        now_eat = datetime.now(EAT).replace(tzinfo=None)
-        mins_passed = (now_eat - ci).total_seconds() / 60
+        mins_passed = (datetime.utcnow() - ci).total_seconds() / 60
         if category == "Delivery":
             return mins_passed > 20
         if estimated_minutes:
@@ -157,6 +140,7 @@ def login():
             session["guard_name"] = guard["full_name"]
             session["username"]   = guard["username"]
             session["guard_id"]   = guard["guard_id"]
+            # role is "admin" or "guard" — drives the navbar visibility
             session["role"]       = guard.get("role", "guard")
             return redirect(url_for("dashboard"))
         else:
@@ -205,10 +189,10 @@ def checkin():
     multi_pax     = request.form.get("multi_pax") == "on"
     pax_count_extra = int(request.form.get("pax_count", 1)) if multi_pax else 0
 
-    # Resolve category
+    # Resolve category — handle "Other" substitution before using it
     raw_category = request.form.get("category", "").strip()
     if raw_category == "Other":
-        custom   = request.form.get("other_category", "").strip()
+        custom = request.form.get("other_category", "").strip()
         category = custom.title() if custom else "Other"
     else:
         category = raw_category
@@ -251,10 +235,10 @@ def checkin():
             if pid:
                 passenger_ids.append(pid)
 
-    # Build UUIDs and timestamp — NOW STORED IN EAT, NOT UTC
+    # Build UUIDs and timestamp
     visitor_uuid = str(uuid.uuid4())
     log_uuid     = str(uuid.uuid4())
-    now_str      = eat_now()          # ← FIXED: was datetime.utcnow()
+    now_str      = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     total_pax    = 1 + pax_count_extra if multi_pax else 1
 
     data = {
@@ -276,6 +260,7 @@ def checkin():
 
     success = upsert_visit(data)
 
+    # Save each passenger as its own row in associated_passengers
     if success and passenger_ids:
         for pid in passenger_ids:
             upsert_passenger(log_uuid, pid)
@@ -324,6 +309,7 @@ def reports():
         r["check_in_display"]  = format_dt(r["check_in_time"])
         r["check_out_display"] = format_dt(r["check_out_time"])
         r["duration"]          = duration_str(r["check_in_time"], r["check_out_time"])
+        # was_overdue comes from SQL; ensure it is a Python bool
         r["was_overdue"]       = bool(r.get("was_overdue", False))
         history.append(r)
 

@@ -2,15 +2,21 @@
 =============================================================================
 server/data/server_db.py  —  Server-Side Database (PostgreSQL)
 
-CHANGES IN THIS VERSION:
-  - get_active_visits_server(): now JOINs guards table and returns guard_name
-    so the web dashboard can show it in the visitor detail popup.
-  - web_checkout(): uses NOW() AT TIME ZONE 'Africa/Nairobi' so checkout
-    timestamps are stored in EAT, consistent with check-in times.
-  - get_visits_for_pull(): NEW — returns all visits (active + completed) that
-    were created on the server since a given timestamp, used by the desktop
-    SyncEngine to pull web check-ins into SQLite.
-  - update_resident_server(): fixed typo SET full_name=% → SET full_name=%s
+FIXES IN THIS VERSION:
+  - get_active_visits_server()  : LEFT JOINs associated_passengers and returns
+                                   pax_ids as a pipe-separated string.
+  - get_visit_history_server()  : Same JOIN; also returns pax_ids.
+  - get_filtered_history()      : Same JOIN + pax_ids + was_overdue flag so
+                                   the web Reports page can highlight rows.
+  - get_all_guards_server()     : NEW — returns all guards for web admin panel.
+  - add_guard_server()          : NEW — adds a guard from the web admin panel.
+  - toggle_guard_server()       : NEW — activates/deactivates a guard.
+  - get_all_residents_server()  : NEW — returns all residents for web admin.
+  - add_resident_server()       : NEW — adds a resident from the web admin.
+  - toggle_resident_server()    : NEW — activates/deactivates a resident.
+  - verify_guard_web()          : FIXED — now checks password hash properly
+                                   using the guards table password column,
+                                   which is added to the schema if missing.
 =============================================================================
 """
 
@@ -40,7 +46,7 @@ def init_server_db():
     conn = get_connection()
     cur  = conn.cursor()
 
-    # Guards table
+    # Guards table — now stores password hash and role for web login
     cur.execute("""
         CREATE TABLE IF NOT EXISTS guards (
             guard_id   SERIAL PRIMARY KEY,
@@ -53,6 +59,7 @@ def init_server_db():
         )
     """)
 
+    # Add password and role columns if upgrading from old schema
     for col, definition in [
         ("password", "TEXT NOT NULL DEFAULT ''"),
         ("role",     "TEXT NOT NULL DEFAULT 'guard'"),
@@ -62,6 +69,8 @@ def init_server_db():
         except Exception:
             conn.rollback()
 
+    # Ensure the default admin account exists on the server
+    # Password is sha256("admin123") — change via the Manage Guards panel
     default_pw = hashlib.sha256(b"admin123").hexdigest()
     cur.execute("""
         INSERT INTO guards (username, full_name, password, role, is_active)
@@ -226,8 +235,8 @@ def upsert_passenger(log_uuid: str, national_id: str) -> bool:
 
 def get_active_visits_server() -> list:
     """
-    Returns active visits with pax_ids and guard_name.
-    guard_name is used by the web dashboard detail popup.
+    Returns active visits with pax_ids populated from associated_passengers.
+    STRING_AGG is the PostgreSQL equivalent of SQLite's GROUP_CONCAT.
     """
     try:
         conn = get_connection()
@@ -236,26 +245,22 @@ def get_active_visits_server() -> list:
             SELECT
                 vl.local_uuid,
                 v.full_name,
-                v.national_id,
-                v.phone_number,
-                v.vehicle_plate,
                 v.category,
+                v.vehicle_plate,
                 vl.pax_count,
                 vl.check_in_time,
                 vl.estimated_minutes,
                 v.exception_flag,
-                COALESCE(g.full_name, 'Unknown') AS guard_name,
                 COALESCE(
                     STRING_AGG(ap.national_id, ' | '), '—'
                 ) AS pax_ids
             FROM visit_logs vl
             JOIN visitors v ON v.local_uuid = vl.visitor_uuid
-            LEFT JOIN guards g ON g.guard_id = vl.guard_id
             LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
             WHERE vl.check_out_time IS NULL
-            GROUP BY vl.local_uuid, v.full_name, v.national_id, v.phone_number,
-                     v.vehicle_plate, v.category, vl.pax_count, vl.check_in_time,
-                     vl.estimated_minutes, v.exception_flag, g.full_name
+            GROUP BY vl.local_uuid, v.full_name, v.category,
+                     v.vehicle_plate, vl.pax_count, vl.check_in_time,
+                     vl.estimated_minutes, v.exception_flag
             ORDER BY vl.check_in_time DESC
         """)
         rows = cur.fetchall()
@@ -268,7 +273,7 @@ def get_active_visits_server() -> list:
 
 
 def get_visit_history_server(limit: int = 200) -> list:
-    """Returns completed visits with pax_ids and guard_name."""
+    """Returns completed visits with pax_ids."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
@@ -282,18 +287,16 @@ def get_visit_history_server(limit: int = 200) -> list:
                 vl.check_in_time,
                 vl.check_out_time,
                 v.exception_flag,
-                COALESCE(g.full_name, 'Unknown') AS guard_name,
                 COALESCE(
                     STRING_AGG(ap.national_id, ' | '), '—'
                 ) AS pax_ids
             FROM visit_logs vl
             JOIN visitors v ON v.local_uuid = vl.visitor_uuid
-            LEFT JOIN guards g ON g.guard_id = vl.guard_id
             LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
             WHERE vl.check_out_time IS NOT NULL
             GROUP BY vl.local_uuid, v.full_name, v.national_id, v.category,
                      vl.pax_count, vl.check_in_time, vl.check_out_time,
-                     v.exception_flag, g.full_name
+                     v.exception_flag
             ORDER BY vl.check_in_time DESC
             LIMIT %s
         """, (limit,))
@@ -312,7 +315,8 @@ def get_filtered_history(category: str = None,
                          limit: int = 200) -> list:
     """
     Filtered visit history for the reports page.
-    Returns pax_ids, guard_name, and was_overdue flag.
+    Returns pax_ids and was_overdue so the web page can highlight rows.
+    was_overdue = TRUE when a Delivery visitor stayed more than 20 minutes.
     """
     try:
         conn   = get_connection()
@@ -327,7 +331,6 @@ def get_filtered_history(category: str = None,
                 vl.check_in_time,
                 vl.check_out_time,
                 v.exception_flag,
-                COALESCE(g.full_name, 'Unknown') AS guard_name,
                 COALESCE(
                     STRING_AGG(ap.national_id, ' | '), '—'
                 ) AS pax_ids,
@@ -342,7 +345,6 @@ def get_filtered_history(category: str = None,
                 END AS was_overdue
             FROM visit_logs vl
             JOIN visitors v ON v.local_uuid = vl.visitor_uuid
-            LEFT JOIN guards g ON g.guard_id = vl.guard_id
             LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
             WHERE vl.check_out_time IS NOT NULL
         """
@@ -356,7 +358,7 @@ def get_filtered_history(category: str = None,
         query += """
             GROUP BY vl.local_uuid, v.full_name, v.national_id, v.category,
                      vl.pax_count, vl.check_in_time, vl.check_out_time,
-                     v.exception_flag, g.full_name
+                     v.exception_flag
             ORDER BY vl.check_in_time DESC
             LIMIT %s
         """
@@ -368,69 +370,6 @@ def get_filtered_history(category: str = None,
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_filtered_history error: {e}")
-        return []
-
-
-def get_visits_for_pull(since: str = None) -> list:
-    """
-    NEW — Returns all visit records (active and completed) that the desktop
-    SyncEngine needs to pull. Used by the /api/pull/visits endpoint.
-
-    'since' is an optional ISO datetime string e.g. '2026-04-15 12:00:00'.
-    When provided, only visits checked in after that time are returned,
-    so the desktop doesn't re-download records it already has.
-
-    Returns a list of dicts, each containing everything the desktop needs
-    to reconstruct a visit in its local SQLite database:
-      log_uuid, visitor_uuid, full_name, national_id, phone_number,
-      vehicle_plate, category, exception_flag, check_in_time,
-      check_out_time, pax_count, guard_id, resident_id, pax_ids
-    """
-    try:
-        conn = get_connection()
-        cur  = conn.cursor()
-
-        query = """
-            SELECT
-                vl.local_uuid        AS log_uuid,
-                v.local_uuid         AS visitor_uuid,
-                v.full_name,
-                v.national_id,
-                v.phone_number,
-                v.vehicle_plate,
-                v.category,
-                v.exception_flag,
-                vl.check_in_time,
-                vl.check_out_time,
-                vl.pax_count,
-                vl.guard_id,
-                vl.resident_id,
-                COALESCE(
-                    STRING_AGG(ap.national_id, ' | '), ''
-                ) AS pax_ids
-            FROM visit_logs vl
-            JOIN visitors v ON v.local_uuid = vl.visitor_uuid
-            LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
-        """
-        params = []
-        if since:
-            query += " WHERE vl.check_in_time > %s"
-            params.append(since)
-
-        query += """
-            GROUP BY vl.local_uuid, v.local_uuid, v.full_name, v.national_id,
-                     v.phone_number, v.vehicle_plate, v.category, v.exception_flag,
-                     vl.check_in_time, vl.check_out_time, vl.pax_count,
-                     vl.guard_id, vl.resident_id
-            ORDER BY vl.check_in_time ASC
-        """
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return [dict(r) for r in rows]
-    except Exception as e:
-        print(f"[ServerDB] get_visits_for_pull error: {e}")
         return []
 
 
@@ -469,20 +408,12 @@ def get_stats_server() -> dict:
 
 
 def web_checkout(log_uuid: str) -> bool:
-    """
-    Stamps checkout time in EAT (Africa/Nairobi = UTC+3).
-    Uses PostgreSQL's AT TIME ZONE so the stored text matches all other
-    timestamps which are also stored as EAT strings.
-    """
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
             UPDATE visit_logs
-            SET check_out_time = TO_CHAR(
-                NOW() AT TIME ZONE 'Africa/Nairobi',
-                'YYYY-MM-DD HH24:MI:SS'
-            )
+            SET check_out_time = NOW()
             WHERE local_uuid = %s AND check_out_time IS NULL
         """, (log_uuid,))
         conn.commit()
@@ -496,6 +427,10 @@ def web_checkout(log_uuid: str) -> bool:
 
 
 def verify_guard_web(username: str, password: str):
+    """
+    Verifies guard credentials for web login against the guards table.
+    Returns guard dict (with role) if valid, None if not.
+    """
     hashed = hashlib.sha256(password.encode()).hexdigest()
     try:
         conn = get_connection()
@@ -516,7 +451,7 @@ def verify_guard_web(username: str, password: str):
         return None
 
 
-# ── GUARD MANAGEMENT ────────────────────────────────────────────────────────
+# ── GUARD MANAGEMENT (web admin panel) ────────────────────────────────────
 
 def get_all_guards_server() -> list:
     try:
@@ -558,6 +493,7 @@ def add_guard_server(username: str, password: str,
 
 
 def toggle_guard_server(guard_id: int) -> bool:
+    """Flips is_active. Returns new is_active state."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
@@ -595,7 +531,7 @@ def reset_guard_password_server(guard_id: int, new_password: str) -> bool:
         return False
 
 
-# ── RESIDENT MANAGEMENT ────────────────────────────────────────────────────
+# ── RESIDENT MANAGEMENT (web admin panel) ─────────────────────────────────
 
 def get_all_residents_server() -> list:
     try:
@@ -637,13 +573,12 @@ def add_resident_server(full_name: str, unit_number: str,
 
 def update_resident_server(resident_id: int, full_name: str,
                             unit_number: str, phone: str) -> bool:
-    """FIXED: was SET full_name=% (missing 's'), now correctly SET full_name=%s"""
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
             UPDATE residents
-            SET full_name=%s, unit_number=%s, phone=%s
+            SET full_name=%, unit_number=%s, phone=%s
             WHERE resident_id=%s
         """, (full_name, unit_number, phone or None, resident_id))
         conn.commit()
@@ -656,6 +591,7 @@ def update_resident_server(resident_id: int, full_name: str,
 
 
 def toggle_resident_server(resident_id: int) -> bool:
+    """Flips is_active. Returns new state."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
