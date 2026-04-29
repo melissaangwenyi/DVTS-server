@@ -80,6 +80,17 @@
         .stat-card .value { font-size: 26px; font-weight: 700; color: #E94560; }
         .stat-card .label { font-size: 11px; color: #A0A0B0; margin-top: 4px; }
 
+        /* ── LEGEND ── */
+        .legend {
+            background: #16213E;
+            border: 1px solid #2A2A4A;
+            border-radius: 6px;
+            padding: 8px 14px;
+            margin-bottom: 14px;
+            font-size: 11px;
+            color: #A0A0B0;
+        }
+
         /* ── FILTERS ── */
         .filters {
             background: #16213E;
@@ -145,7 +156,7 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
-            min-width: 900px;
+            min-width: 960px;
         }
         thead th {
             background: #0F3460;
@@ -158,9 +169,11 @@
             white-space: nowrap;
         }
         tbody tr { border-bottom: 1px solid #2A2A4A; }
-        tbody tr:nth-child(even) { background: #16213E; }
-        tbody tr:nth-child(odd)  { background: #1A1A2E; }
-        tbody tr:hover           { background: #0F3460; }
+        tbody tr:nth-child(even)  { background: #16213E; }
+        tbody tr:nth-child(odd)   { background: #1A1A2E; }
+        /* Overdue rows — mirrors the live dashboard red highlight */
+        tbody tr.was-overdue      { background: #4A0A0A; color: #E74C3C; }
+        tbody tr:hover            { background: #0F3460; }
         tbody td { padding: 10px 12px; }
 
         .badge {
@@ -178,7 +191,7 @@
         .pax-ids {
             font-size: 11px;
             color: #A0A0B0;
-            max-width: 150px;
+            max-width: 160px;
             word-break: break-word;
         }
 
@@ -217,9 +230,14 @@
     </div>
 </div>
 
+<!-- NAV BAR — admin links only shown when role == 'admin' -->
 <div class="navbar">
     <a href="/dashboard">🏠 Dashboard</a>
     <a href="/reports" class="active">📊 Visit Reports</a>
+    {% if session.get('role') == 'admin' %}
+    <a href="/manage-guards">👮 Manage Guards</a>
+    <a href="/manage-residents">🏡 Manage Residents</a>
+    {% endif %}
 </div>
 
 <div class="content">
@@ -250,6 +268,12 @@
             <div class="value" style="color:#2ECC71;">{{ stats.by_category.get('Maintenance', 0) }}</div>
             <div class="label">Maintenance</div>
         </div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+        🔴 Red row = Delivery visitor was OVERDUE (stayed longer than 20 minutes) &nbsp;|&nbsp;
+        ⚠ = Zero-Trust / No-ID entry
     </div>
 
     <!-- FILTERS -->
@@ -299,7 +323,11 @@
             </thead>
             <tbody>
                 {% for r in history %}
-                <tr>
+                <!--
+                    was-overdue CSS class turns the row red, exactly like the
+                    live dashboard does for active overdue deliveries.
+                -->
+                <tr class="{{ 'was-overdue' if r.was_overdue else '' }}">
                     <td>{{ r.full_name }}</td>
                     <td>{{ r.national_id or '—' }}</td>
                     <td>
@@ -315,7 +343,11 @@
                     <td>{{ r.check_in_display }}</td>
                     <td>{{ r.check_out_display }}</td>
                     <td>{{ r.duration }}</td>
-                    <td>{{ '⚠ NO-ID' if r.exception_flag else '' }}</td>
+                    <td>
+                        {% if r.was_overdue %}🔴 OVERDUE
+                        {% elif r.exception_flag %}⚠ NO-ID
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -85,7 +85,7 @@
             min-height: calc(100vh - 90px);
         }
 
-        /* ── LEFT PANEL - CHECK-IN FORM ── */
+        /* ── LEFT PANEL ── */
         .left-panel {
             background: #16213E;
             border-right: 1px solid #2A2A4A;
@@ -194,7 +194,7 @@
         }
         .submit-btn:hover { background: #C73652; }
 
-        /* ── RIGHT PANEL - OCCUPANCY TABLE ── */
+        /* ── RIGHT PANEL ── */
         .right-panel {
             background: #16213E;
             overflow-y: auto;
@@ -223,7 +223,6 @@
             border-bottom: 1px solid #2A2A4A;
         }
 
-        /* ── TABLE WRAPPER - horizontal scroll on mobile ── */
         .table-wrap {
             flex: 1;
             overflow-x: auto;
@@ -233,7 +232,7 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
-            min-width: 700px;
+            min-width: 750px;
         }
         thead th {
             background: #0F3460;
@@ -306,11 +305,11 @@
         .pax-ids {
             font-size: 11px;
             color: #A0A0B0;
-            max-width: 150px;
+            max-width: 160px;
             word-break: break-word;
         }
 
-        /* ── MOBILE RESPONSIVENESS ── */
+        /* ── MOBILE ── */
         @media (max-width: 768px) {
             .main {
                 display: flex;
@@ -326,17 +325,14 @@
                 max-height: none;
                 overflow-y: visible;
             }
-            .table-wrap {
-                overflow-x: auto;
-            }
-            .topbar { padding: 10px 16px; }
-            .form-body { padding: 12px; }
-            .navbar { padding: 8px 16px; }
+            .table-wrap { overflow-x: auto; }
+            .topbar      { padding: 10px 16px; }
+            .form-body   { padding: 12px; }
+            .navbar      { padding: 8px 16px; }
         }
-
         @media (max-width: 480px) {
             .topbar h1 { font-size: 15px; }
-            .navbar a { padding: 6px 10px; font-size: 12px; }
+            .navbar a  { padding: 6px 10px; font-size: 12px; }
         }
     </style>
 </head>
@@ -351,10 +347,14 @@
     </div>
 </div>
 
-<!-- NAV BAR -->
+<!-- NAV BAR — admin links only shown when role == 'admin' -->
 <div class="navbar">
     <a href="/dashboard" class="active">🏠 Dashboard</a>
     <a href="/reports">📊 Visit Reports</a>
+    {% if session.get('role') == 'admin' %}
+    <a href="/manage-guards">👮 Manage Guards</a>
+    <a href="/manage-residents">🏡 Manage Residents</a>
+    {% endif %}
 </div>
 
 <!-- FLASH MESSAGES -->
@@ -371,7 +371,12 @@
     <div class="left-panel">
         <div class="panel-header">➕ ADD VISITOR</div>
         <div class="form-body">
-            <form method="POST" action="/checkin" id="checkinForm">
+            <!--
+                autocomplete="off" on the whole form prevents the browser from
+                auto-filling the National ID field with the saved username.
+                Individual sensitive fields also carry autocomplete="off".
+            -->
+            <form method="POST" action="/checkin" id="checkinForm" autocomplete="off">
 
                 <!-- SECTION A -->
                 <div class="section-title">A — Primary Details</div>
@@ -379,23 +384,31 @@
                 <label>Full Name *</label>
                 <input type="text" name="full_name" id="full_name"
                        placeholder="Letters and spaces only"
+                       autocomplete="off"
                        required oninput="enforceLetters(this, 'name_error')">
-                <div class="field-error" id="name_error">⚠ Full name must contain letters only — no numbers or special characters.</div>
+                <div class="field-error" id="name_error">⚠ Full name must contain letters only.</div>
 
                 <label>National ID *</label>
+                <!--
+                    autocomplete="off" stops the browser inserting the saved
+                    username (e.g. "admin") into this field automatically.
+                -->
                 <input type="text" name="national_id" id="national_id"
                        placeholder="Numbers only"
+                       autocomplete="off"
                        oninput="enforceDigits(this, 'nid_error')">
                 <div class="field-error" id="nid_error">⚠ National ID must contain numbers only.</div>
 
                 <label>Phone Number</label>
                 <input type="text" name="phone_number" id="phone_number"
                        placeholder="e.g. 0712345678"
+                       autocomplete="off"
                        oninput="enforceDigits(this, 'phone_error')">
                 <div class="field-error" id="phone_error">⚠ Phone number must contain numbers only.</div>
 
                 <label>Vehicle Plate</label>
-                <input type="text" name="vehicle_plate" placeholder="e.g. KCA 001A">
+                <input type="text" name="vehicle_plate" placeholder="e.g. KCA 001A"
+                       autocomplete="off">
 
                 <label>Category *</label>
                 <select name="category" id="category_select" required
@@ -412,24 +425,23 @@
                     ℹ Delivery is automatically set to 20 minutes. No input needed.
                 </div>
 
-                <!-- Other: custom category name -->
+                <!-- Other: custom category -->
                 <div id="other_section" class="hidden">
                     <label class="warning-label">Specify Category *</label>
                     <input type="text" name="other_category" id="other_category"
-                           placeholder="e.g. Contractor, Event">
+                           placeholder="e.g. Contractor, Event"
+                           autocomplete="off">
                 </div>
 
-                <!-- Estimated stay: Maintenance + Other -->
+                <!-- Estimated stay -->
                 <div id="duration_section" class="hidden">
                     <label class="warning-label">Estimated Stay (Minutes) *</label>
                     <input type="number" name="estimated_minutes" id="estimated_minutes"
                            placeholder="e.g. 120" min="1"
+                           autocomplete="off"
                            oninput="enforcePositiveInt(this, 'est_error')">
                     <div class="field-error" id="est_error">⚠ Please enter a valid number of minutes.</div>
                 </div>
-
-                <!-- hidden field carries the 20-min value for Delivery -->
-                <input type="hidden" name="estimated_minutes_delivery" id="est_delivery" value="20">
 
                 <!-- SECTION B -->
                 <div class="section-title">B — Zero-Trust Exception</div>
@@ -442,7 +454,9 @@
 
                 <div id="pin_section" class="hidden">
                     <label class="warning-label">Host Secret PIN *</label>
-                    <input type="password" name="host_pin" placeholder="Enter host PIN">
+                    <input type="password" name="host_pin"
+                           placeholder="Enter host PIN"
+                           autocomplete="off">
                 </div>
 
                 <!-- SECTION C -->
@@ -503,9 +517,12 @@
                 <tr class="{{ 'overdue' if v.overdue else '' }}">
                     <td>{{ v.full_name }}</td>
                     <td>
-                        <span class="badge badge-{{ v.category|lower }}">
-                            {{ v.category }}
-                        </span>
+                        {% set cat_lower = v.category|lower %}
+                        {% if cat_lower in ['guest','delivery','maintenance'] %}
+                        <span class="badge badge-{{ cat_lower }}">{{ v.category }}</span>
+                        {% else %}
+                        <span class="badge badge-other">{{ v.category }}</span>
+                        {% endif %}
                     </td>
                     <td style="text-align:center;">{{ v.pax_count }}</td>
                     <td class="pax-ids">{{ v.pax_ids or '—' }}</td>
@@ -544,11 +561,10 @@
 <script>
     /* ── INPUT VALIDATION ── */
 
-    // Digits only (National ID, Phone, Associated Visitor IDs)
     function enforceDigits(input, errorId) {
-        var val = input.value;
+        var val     = input.value;
         var cleaned = val.replace(/\D/g, '');
-        var errEl = document.getElementById(errorId);
+        var errEl   = document.getElementById(errorId);
         if (val !== cleaned) {
             input.value = cleaned;
             input.classList.add('error-field');
@@ -560,12 +576,10 @@
         }
     }
 
-    // Letters and spaces only (Full Name)
     function enforceLetters(input, errorId) {
-        var val = input.value;
-        // Allow letters (including accented), spaces, hyphens, apostrophes
+        var val     = input.value;
         var cleaned = val.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
-        var errEl = document.getElementById(errorId);
+        var errEl   = document.getElementById(errorId);
         if (val !== cleaned) {
             input.value = cleaned;
             input.classList.add('error-field');
@@ -577,9 +591,8 @@
         }
     }
 
-    // Positive integers only (Estimated minutes)
     function enforcePositiveInt(input, errorId) {
-        var val = input.value;
+        var val   = input.value;
         var errEl = document.getElementById(errorId);
         if (val && (isNaN(val) || parseInt(val) < 1)) {
             input.classList.add('error-field');
@@ -590,16 +603,14 @@
         }
     }
 
-    /* ── CATEGORY: show/hide duration + other fields ── */
+    /* ── CATEGORY ── */
     function toggleCategoryOptions(selectElem) {
         var durationSec   = document.getElementById('duration_section');
         var durationInput = document.getElementById('estimated_minutes');
         var otherSec      = document.getElementById('other_section');
         var otherInput    = document.getElementById('other_category');
         var delivNote     = document.getElementById('delivery_note');
-        var nidInput      = document.getElementById('national_id');
 
-        // Reset all
         durationSec.classList.add('hidden');
         otherSec.classList.add('hidden');
         delivNote.classList.add('hidden');
@@ -611,7 +622,6 @@
             durationInput.required = true;
         } else if (selectElem.value === 'Delivery') {
             delivNote.classList.remove('hidden');
-            // auto-fill hidden value; backend will use 20
         } else if (selectElem.value === 'Other') {
             otherSec.classList.remove('hidden');
             otherInput.required = true;
@@ -628,7 +638,7 @@
             pinSection.classList.remove('hidden');
             nidField.required = false;
             nidField.disabled = true;
-            nidField.value = '';
+            nidField.value    = '';
         } else {
             pinSection.classList.add('hidden');
             nidField.disabled = false;
@@ -658,24 +668,22 @@
             lbl.style.marginTop = '6px';
 
             var inp = document.createElement('input');
-            inp.type = 'text';
-            inp.name = 'associated_id_' + i;
-            inp.placeholder = 'National ID (numbers only)';
-            inp.required = true;
+            inp.type         = 'text';
+            inp.name         = 'associated_id_' + i;
+            inp.placeholder  = 'National ID (numbers only)';
+            inp.required     = true;
+            inp.autocomplete = 'off';
 
-            // digits-only validation for each associated visitor ID
-            (function(input, idx) {
+            (function(input) {
                 input.addEventListener('input', function() {
                     var cleaned = input.value.replace(/\D/g, '');
                     if (input.value !== cleaned) {
                         input.value = cleaned;
                         input.style.borderColor = '#E74C3C';
-                        setTimeout(function() {
-                            input.style.borderColor = '';
-                        }, 2000);
+                        setTimeout(function() { input.style.borderColor = ''; }, 2000);
                     }
                 });
-            })(inp, i);
+            })(inp);
 
             wrapper.appendChild(lbl);
             wrapper.appendChild(inp);
