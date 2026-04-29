@@ -107,6 +107,7 @@ def init_server_db():
     """)
 
     # Visit logs — core transaction table
+    # Visit logs — core transaction table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS visit_logs (
             local_uuid      TEXT    PRIMARY KEY,
@@ -114,6 +115,7 @@ def init_server_db():
             guard_id        INTEGER,
             resident_id     INTEGER,
             pax_count       INTEGER NOT NULL DEFAULT 1,
+            estimated_minutes INTEGER,  -- NEW COLUMN ADDED HERE
             check_in_time   TEXT    NOT NULL,
             check_out_time  TEXT,
             created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -177,20 +179,23 @@ def upsert_visit(data: dict) -> bool:
         ))
 
         # Save the visit log (child record — references visitor via UUID)
+        # Save the visit log (child record — references visitor via UUID)
         cur.execute("""
             INSERT INTO visit_logs
                 (local_uuid, visitor_uuid, guard_id, resident_id,
-                 pax_count, check_in_time, check_out_time)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                 pax_count, estimated_minutes, check_in_time, check_out_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (local_uuid) DO UPDATE SET
-                check_out_time = EXCLUDED.check_out_time,
-                pax_count      = EXCLUDED.pax_count
+                check_out_time    = EXCLUDED.check_out_time,
+                pax_count         = EXCLUDED.pax_count,
+                estimated_minutes = EXCLUDED.estimated_minutes
         """, (
             data["log_uuid"],
             data["visitor_uuid"],
             data.get("guard_id"),
             data.get("resident_id"),
             data.get("pax_count", 1),
+            data.get("estimated_minutes"), # NEW DATA EXTRACTED HERE
             data["check_in_time"],
             data.get("check_out_time"),
         ))

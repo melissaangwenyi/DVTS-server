@@ -71,14 +71,22 @@ def format_dt(dt_str):
         return str(dt_str) if dt_str else "—"
 
 
-def is_overdue(category, check_in_str):
-    if category != "Delivery":
-        return False
+def is_overdue(category, check_in_str, estimated_minutes=None):
     try:
         fmt = "%Y-%m-%d %H:%M:%S"
         ci  = datetime.strptime(str(check_in_str)[:19], fmt)
-        mins = (datetime.utcnow() - ci).total_seconds() / 60
-        return mins > 20
+        mins_passed = (datetime.utcnow() - ci).total_seconds() / 60
+        
+        # Rule 1: Delivery is strictly hardcoded to 20 minutes
+        if category == "Delivery":
+            return mins_passed > 20
+            
+        # Rule 2: If an estimated time was provided (Maintenance, Other), check it
+        if estimated_minutes:
+            return mins_passed > float(estimated_minutes)
+            
+        # Rule 3: Guests (or anyone without a timer) are never overdue
+        return False
     except Exception:
         return False
 
@@ -127,7 +135,8 @@ def dashboard():
     for v in raw_visits:
         v["entry_display"] = format_dt(v["check_in_time"])
         v["duration"]      = duration_str(v["check_in_time"])
-        v["overdue"]       = is_overdue(v["category"], v["check_in_time"])
+        v["overdue"]       = is_overdue(v["category"], v["check_in_time"], v.get("estimated_minutes"))
+        v["pax_ids"]       = v.get("pax_ids")  # Include the associated IDs
         visits.append(v)
 
     return render_template("dashboard.html", visits=visits)
@@ -143,8 +152,35 @@ def checkin():
     category     = request.form.get("category",     "").strip()
     no_id        = request.form.get("no_id") == "on"
     host_pin     = request.form.get("host_pin",     "").strip()
+
+    est_mins_raw = request.form.get("estimated_minutes", "").strip()
+    # Convert to an integer if the user typed something, otherwise save as None
+    estimated_minutes = int(est_mins_raw) if est_mins_raw.isdigit() else None
+
+
     multi_pax    = request.form.get("multi_pax") == "on"
     pax_count    = int(request.form.get("pax_count", 1)) if multi_pax else 1
+
+    # Add this right after getting the variables in the /checkin route
+    if not no_id and national_id and not national_id.isdigit():
+        flash("❌ National ID must contain only numbers.", "error")
+        return redirect(url_for("dashboard"))
+
+    if phone_number and not phone_number.isdigit():
+        flash("❌ Phone number must contain only numbers.", "error")
+        return redirect(url_for("dashboard"))
+
+    # --- NEW CODE: Extract the associated IDs ---
+    extracted_ids = []
+    if multi_pax:
+        for i in range(1, pax_count + 1):
+            assoc_id = request.form.get(f"associated_id_{i}", "").strip()
+            if assoc_id:
+                extracted_ids.append(assoc_id)
+    
+    # Join them into a comma-separated string (e.g. "12345678, 87654321")
+    pax_ids_string = ", ".join(extracted_ids) if extracted_ids else None
+    # --------------------------------------------
 
     # Basic validation
     if not full_name or not category:
@@ -165,20 +201,33 @@ def checkin():
     now_str      = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
     data = {
-        "log_uuid":       log_uuid,
-        "visitor_uuid":   visitor_uuid,
-        "full_name":      full_name,
-        "national_id":    national_id if not no_id else None,
-        "phone_number":   phone_number,
-        "vehicle_plate":  vehicle_plate,
-        "category":       category,
-        "exception_flag": no_id,
-        "check_in_time":  now_str,
-        "check_out_time": None,
-        "pax_count":      pax_count + 1 if multi_pax else 1,
-        "guard_id":       None,
-        "resident_id":    None,
+        "log_uuid":          log_uuid,
+        "visitor_uuid":      visitor_uuid,
+        "full_name":         full_name,
+        "national_id":       national_id if not no_id else None,
+        "phone_number":      phone_number,
+        "vehicle_plate":     vehicle_plate,
+        "category":          category,
+        "exception_flag":    no_id,
+        "check_in_time":     now_str,
+        "check_out_time":    None,
+        "pax_count":         pax_count + 1 if multi_pax else 1,
+        "pax_ids":           pax_ids_string,
+        "estimated_minutes": estimated_minutes, # <-- NEW LINE ADDED HERE
+        "guard_id":          None,
+        "resident_id":       None,
     }
+
+    category     = request.form.get("category",     "").strip()
+    
+    # --- NEW: Handle "Other" category substitution ---
+    if category == "Other":
+        custom_category = request.form.get("other_category", "").strip()
+        if custom_category:
+            category = custom_category.title()  # e.g., "Contractor"
+    # -------------------------------------------------
+
+
 
     success = upsert_visit(data)
 
