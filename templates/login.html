@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <style>
         body {
             display: flex;
@@ -15,17 +16,24 @@
             align-items: center;
             justify-content: center;
             padding: 20px;
+            position: relative;
             background:
                 radial-gradient(circle at 15% 25%, rgba(0, 133, 100, 0.08) 0%, transparent 45%),
                 radial-gradient(circle at 85% 75%, rgba(0, 133, 100, 0.06) 0%, transparent 45%),
                 var(--bg);
         }
-
-        .login-shell {
-            width: 100%;
-            max-width: 440px;
+        :root[data-theme="dark"] body {
+            background:
+                radial-gradient(circle at 15% 25%, rgba(29, 158, 117, 0.18) 0%, transparent 45%),
+                radial-gradient(circle at 85% 75%, rgba(29, 158, 117, 0.10) 0%, transparent 45%),
+                var(--bg);
         }
-
+        .theme-corner {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+        }
+        .login-shell { width: 100%; max-width: 440px; }
         .login-box {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -33,50 +41,26 @@
             padding: 40px 36px;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
         }
-
-        .logo-block {
-            text-align: center;
-            margin-bottom: 32px;
-        }
-
+        .logo-block { text-align: center; margin-bottom: 32px; }
         .logo-mark-large {
-            width: 64px;
-            height: 64px;
+            width: 64px; height: 64px;
             background: var(--teal);
             border-radius: 18px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-size: 30px;
-            margin-bottom: 16px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 30px; margin-bottom: 16px;
             box-shadow: 0 6px 16px rgba(0, 133, 100, 0.3);
         }
-
-        .logo-block h1 {
-            font-size: 20px;
-            font-weight: 600;
-            color: var(--text);
-            margin-bottom: 6px;
-        }
-        .logo-block p {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
-
+        .logo-block h1 { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+        .logo-block p { font-size: 13px; color: var(--text-muted); }
         .login-box .btn { margin-top: 6px; }
-
         .footer {
-            margin-top: 28px;
-            text-align: center;
-            font-size: 11px;
-            color: var(--text-faint);
+            margin-top: 28px; text-align: center;
+            font-size: 11px; color: var(--text-faint);
             line-height: 1.6;
         }
         .footer .divider {
             display: inline-block;
-            width: 4px;
-            height: 4px;
+            width: 4px; height: 4px;
             border-radius: 50%;
             background: var(--text-faint);
             vertical-align: middle;
@@ -85,6 +69,13 @@
     </style>
 </head>
 <body>
+
+<div class="theme-corner">
+    <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <span class="icon-moon">🌙</span>
+        <span class="icon-sun">☀</span>
+    </button>
+</div>
 
 <div class="login-shell">
 

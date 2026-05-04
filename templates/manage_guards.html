@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
 
@@ -20,6 +21,10 @@
         </div>
     </div>
     <div class="topbar-right">
+        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="icon-moon">🌙</span>
+            <span class="icon-sun">☀</span>
+        </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
     </div>
@@ -29,7 +34,9 @@
     <a href="/dashboard">🏠 Dashboard</a>
     <a href="/reports">📊 Reports</a>
     <a href="/manage-guards" class="active">👮 Guards</a>
-    <a href="/manage-residents">🏡 Residents</a>
+    <a href="/manage-hosts">🏡 Hosts</a>
+    <a href="/blacklist">⛔ Blacklist</a>
+    <a href="/audit-log">📜 Audit log</a>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -59,8 +66,14 @@
                     </thead>
                     <tbody>
                         {% for guard in guards %}
-                        <tr>
-                            <td style="font-weight: 500;">{{ guard.username }}</td>
+                        {% set is_self = guard.guard_id == session.get('guard_id') %}
+                        <tr class="{{ 'self-row' if is_self else '' }}">
+                            <td style="font-weight: 500;">
+                                {{ guard.username }}
+                                {% if is_self %}
+                                <span class="badge badge-status-active" style="margin-left: 6px;">You</span>
+                                {% endif %}
+                            </td>
                             <td>{{ guard.full_name }}</td>
                             <td>
                                 {% if guard.role == 'admin' %}
@@ -77,9 +90,20 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <form action="/manage-guards/toggle/{{ guard.guard_id }}" method="POST" style="display:inline;">
+                                {% if is_self %}
+                                <button class="btn btn-sm btn-secondary disabled"
+                                        disabled
+                                        title="You can't toggle your own account. Ask another admin.">
+                                    🔒 Locked
+                                </button>
+                                {% else %}
+                                <form action="/manage-guards/toggle/{{ guard.guard_id }}"
+                                      method="POST"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('{% if guard.is_active %}Deactivate{% else %}Activate{% endif %} {{ guard.username }}?');">
                                     <button type="submit" class="btn btn-sm btn-secondary">Toggle</button>
                                 </form>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -117,6 +141,11 @@
 
                     <button type="submit" class="btn">➕ Add guard</button>
                 </form>
+
+                <div class="info-note" style="margin-top: 18px;">
+                    <span>🔐</span>
+                    <span>Security: you cannot disable your own account. Have another admin do it for you if needed.</span>
+                </div>
             </div>
         </div>
 

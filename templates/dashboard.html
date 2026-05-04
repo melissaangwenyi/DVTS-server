@@ -8,10 +8,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
 
-<!-- TOP BAR -->
 <div class="topbar">
     <div class="topbar-brand">
         <div class="logo-mark">🛡</div>
@@ -21,29 +21,32 @@
         </div>
     </div>
     <div class="topbar-right">
+        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="icon-moon">🌙</span>
+            <span class="icon-sun">☀</span>
+        </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
     </div>
 </div>
 
-<!-- NAVBAR -->
 <div class="navbar">
     <a href="/dashboard" class="active">🏠 Dashboard</a>
     <a href="/reports">📊 Reports</a>
     {% if session.get('role') == 'admin' %}
     <a href="/manage-guards">👮 Guards</a>
-    <a href="/manage-residents">🏡 Residents</a>
+    <a href="/manage-hosts">🏡 Hosts</a>
+    <a href="/blacklist">⛔ Blacklist</a>
+    <a href="/audit-log">📜 Audit log</a>
     {% endif %}
 </div>
 
-<!-- FLASH MESSAGES -->
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% for category, message in messages %}
         <div class="flash {{ category }}">{{ message }}</div>
     {% endfor %}
 {% endwith %}
 
-<!-- MAIN -->
 <div class="dashboard-main">
 
     <!-- LEFT: CHECK-IN FORM -->
@@ -54,19 +57,41 @@
 
                 <div class="section-title">A — Primary details</div>
 
+                <label>National ID *</label>
+                <input type="text" name="national_id" id="national_id"
+                       placeholder="Enter ID — autofills if returning"
+                       autocomplete="off"
+                       oninput="enforceDigits(this, 'nid_error'); maybeLookupVisitor(this.value);">
+                <div class="field-error" id="nid_error">National ID must contain numbers only.</div>
+
+                <!-- Autofill banner -->
+                <div class="autofill-banner" id="autofill_banner">
+                    <span>✨</span>
+                    <span><strong>Returning visitor recognised</strong> — details autofilled. Edit any field if needed.</span>
+                </div>
+
+                <!-- Blacklist alert -->
+                <div class="blacklist-alert" id="blacklist_alert">
+                    <div class="title">⛔ THIS VISITOR IS BLACKLISTED</div>
+                    <div class="reason" id="blacklist_reason">—</div>
+                    {% if session.get('role') == 'admin' %}
+                    <label class="override-row">
+                        <input type="checkbox" name="blacklist_override" id="blacklist_override">
+                        Override block (admin only) — proceed anyway. This action will be audited.
+                    </label>
+                    {% else %}
+                    <div class="override-row" style="border: none; padding: 0;">
+                        Only admins can override this block.
+                    </div>
+                    {% endif %}
+                </div>
+
                 <label>Full name *</label>
                 <input type="text" name="full_name" id="full_name"
                        placeholder="Letters and spaces only"
                        autocomplete="off"
                        required oninput="enforceLetters(this, 'name_error')">
                 <div class="field-error" id="name_error">Full name must contain letters only.</div>
-
-                <label>National ID *</label>
-                <input type="text" name="national_id" id="national_id"
-                       placeholder="Numbers only"
-                       autocomplete="off"
-                       oninput="enforceDigits(this, 'nid_error')">
-                <div class="field-error" id="nid_error">National ID must contain numbers only.</div>
 
                 <label>Phone number</label>
                 <input type="text" name="phone_number" id="phone_number"
@@ -76,8 +101,27 @@
                 <div class="field-error" id="phone_error">Phone number must contain numbers only.</div>
 
                 <label>Vehicle plate</label>
-                <input type="text" name="vehicle_plate" placeholder="e.g. KCA 001A"
+                <input type="text" name="vehicle_plate" id="vehicle_plate"
+                       placeholder="e.g. KCA 001A"
                        autocomplete="off">
+
+                <label>Visiting which unit / office *</label>
+                <select name="host_unit" id="host_unit" required>
+                    <option value="">— Select unit / office —</option>
+                    {% for h in hosts %}
+                    <option value="{{ h.unit_number }}">
+                        {{ h.unit_number }} — {{ h.full_name }}
+                        {% if h.host_type == 'office' %}(office){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                <label>Reason for visit</label>
+                <input type="text" name="reason"
+                       placeholder="e.g. Job interview, package delivery"
+                       autocomplete="off"
+                       maxlength="120">
+                <div class="field-help">Optional — short note about why they're visiting.</div>
 
                 <label>Category *</label>
                 <select name="category" id="category_select" required
@@ -128,7 +172,7 @@
 
                 <label class="checkbox-row">
                     <input type="checkbox" id="multi_pax" name="multi_pax"
-                           onchange="togglePax(this)">
+                           onchange="togglePaxFormSection(this)">
                     Multiple visitors
                 </label>
 
@@ -157,9 +201,23 @@
             <span class="count">{{ visits|length }} on premises</span>
         </div>
 
+        <form method="GET" action="/dashboard" class="unit-filter-strip">
+            <label>Filter by unit:</label>
+            <select name="unit" onchange="this.form.submit()">
+                <option value="">All units</option>
+                {% for u in units %}
+                <option value="{{ u }}" {{ 'selected' if unit_filter==u }}>{{ u }}</option>
+                {% endfor %}
+            </select>
+            {% if unit_filter %}
+            <a href="/dashboard" class="btn btn-sm btn-secondary">Clear</a>
+            {% endif %}
+        </form>
+
         <div class="legend" style="margin: 14px 20px 0; border: 1px dashed var(--border); background: var(--surface-alt);">
             <span class="legend-item"><span class="legend-dot red"></span>Overdue</span>
             <span class="legend-item">⚠ Zero-trust / no-ID entry</span>
+            <span class="legend-item" style="color: var(--text-muted);">Click pax count to reveal IDs</span>
         </div>
 
         <div class="table-wrap" style="margin: 14px 20px 0; border: 1px solid var(--border); border-radius: var(--radius-md);">
@@ -169,11 +227,13 @@
                 <tr>
                     <th>Name</th>
                     <th>Category</th>
+                    <th>Unit</th>
+                    <th>Reason</th>
                     <th>Pax</th>
-                    <th>Associated IDs</th>
                     <th>Plate</th>
                     <th>Entry</th>
                     <th>Duration</th>
+                    <th>Checked in by</th>
                     <th>Note</th>
                     <th>Action</th>
                 </tr>
@@ -190,11 +250,25 @@
                         <span class="badge badge-other">{{ v.category }}</span>
                         {% endif %}
                     </td>
-                    <td style="text-align:center;">{{ v.pax_count }}</td>
-                    <td class="pax-ids">{{ v.pax_ids or '—' }}</td>
+                    <td><code>{{ v.host_unit or '—' }}</code></td>
+                    <td style="font-size: 12px; color: var(--text-muted); max-width: 140px;">
+                        {{ v.reason_for_visit or '—' }}
+                    </td>
+                    <td>
+                        {% if v.pax_count > 1 and v.pax_ids and v.pax_ids != '—' %}
+                        <span class="pax-badge"
+                              onclick="togglePaxIds('active-{{ loop.index }}', this)"
+                              title="Click to view IDs">
+                            👥 {{ v.pax_count }} <span class="chevron">▾</span>
+                        </span>
+                        {% else %}
+                        <span class="pax-badge no-pax">{{ v.pax_count }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ v.vehicle_plate or '—' }}</td>
                     <td style="white-space: nowrap;">{{ v.entry_display }}</td>
                     <td style="white-space: nowrap;">{{ v.duration }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ v.checkin_guard_name or '—' }}</td>
                     <td>
                         {% if v.overdue %}<span style="font-weight: 600;">🔴 Overdue</span>
                         {% elif v.exception_flag %}<span style="color: var(--amber-strong);">⚠ No-ID</span>
@@ -209,19 +283,38 @@
                         </form>
                     </td>
                 </tr>
+                {% if v.pax_count > 1 and v.pax_ids and v.pax_ids != '—' %}
+                <tr id="pax-active-{{ loop.index }}" class="pax-detail-row hidden">
+                    <td colspan="11">
+                        <strong style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            Associated visitor IDs ({{ v.pax_count - 1 }}):
+                        </strong>
+                        <div class="pax-ids-list" style="margin-top: 6px;">
+                            {% for pid in v.pax_ids.split(' | ') %}
+                            <span class="pax-id-chip">{{ pid }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
         <div class="no-data">
             <span class="icon">👋</span>
-            No visitors currently on premises.
+            {% if unit_filter %}
+                No visitors currently in <strong>{{ unit_filter }}</strong>.
+            {% else %}
+                No visitors currently on premises.
+            {% endif %}
         </div>
         {% endif %}
         </div>
 
         <div class="action-bar" style="margin-top: 16px;">
-            <a href="/dashboard" class="refresh-btn">🔄 Refresh</a>
+            <a href="{{ url_for('dashboard', unit=unit_filter) if unit_filter else url_for('dashboard') }}"
+               class="refresh-btn">🔄 Refresh</a>
             <span class="status-text">Auto-refreshes on page load</span>
         </div>
     </div>
@@ -229,12 +322,59 @@
 </div>
 
 <script>
-    /* ── INPUT VALIDATION ── */
+    /* ── AUTOFILL (debounced lookup as the user types the NID) ── */
+    var lookupTimer = null;
+    function maybeLookupVisitor(value) {
+        var nid = (value || '').replace(/\D/g, '');
+        var banner   = document.getElementById('autofill_banner');
+        var bl       = document.getElementById('blacklist_alert');
+        var reasonEl = document.getElementById('blacklist_reason');
 
+        // Clear any prior alerts immediately when user is editing
+        banner.classList.remove('visible');
+        bl.classList.remove('visible');
+
+        if (lookupTimer) { clearTimeout(lookupTimer); }
+        if (nid.length < 5) return;
+
+        lookupTimer = setTimeout(function() {
+            fetch('/api/lookup-visitor?nid=' + encodeURIComponent(nid))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.found) {
+                        // Only autofill if the field is empty (don't overwrite typing)
+                        var nameField  = document.getElementById('full_name');
+                        var phoneField = document.getElementById('phone_number');
+                        var plateField = document.getElementById('vehicle_plate');
+                        if (!nameField.value)  nameField.value  = data.full_name  || '';
+                        if (!phoneField.value) phoneField.value = data.phone_number || '';
+                        if (!plateField.value) plateField.value = data.vehicle_plate || '';
+                        banner.classList.add('visible');
+                        setTimeout(function() {
+                            banner.classList.add('fade-out');
+                        }, 4000);
+                    }
+                    if (data.blacklisted) {
+                        reasonEl.textContent = 'Reason: ' + (data.blacklist_reason || 'No reason recorded');
+                        bl.classList.add('visible');
+                    }
+                })
+                .catch(function(err) { console.warn('Lookup failed:', err); });
+        }, 400);  // 400ms debounce
+    }
+
+    /* ── PAX-IDS REVEAL ── */
+    function togglePaxIds(rowId, badgeEl) {
+        var row = document.getElementById('pax-' + rowId);
+        if (!row) return;
+        row.classList.toggle('hidden');
+        badgeEl.classList.toggle('expanded');
+    }
+
+    /* ── INPUT VALIDATION ── */
     function enforceDigits(input, errorId) {
-        var val     = input.value;
-        var cleaned = val.replace(/\D/g, '');
-        var errEl   = document.getElementById(errorId);
+        var val = input.value, cleaned = val.replace(/\D/g, '');
+        var errEl = document.getElementById(errorId);
         if (val !== cleaned) {
             input.value = cleaned;
             input.classList.add('error-field');
@@ -247,9 +387,8 @@
     }
 
     function enforceLetters(input, errorId) {
-        var val     = input.value;
-        var cleaned = val.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
-        var errEl   = document.getElementById(errorId);
+        var val = input.value, cleaned = val.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
+        var errEl = document.getElementById(errorId);
         if (val !== cleaned) {
             input.value = cleaned;
             input.classList.add('error-field');
@@ -262,7 +401,7 @@
     }
 
     function enforcePositiveInt(input, errorId) {
-        var val   = input.value;
+        var val = input.value;
         var errEl = document.getElementById(errorId);
         if (val && (isNaN(val) || parseInt(val) < 1)) {
             input.classList.add('error-field');
@@ -309,14 +448,17 @@
             nidField.required = false;
             nidField.disabled = true;
             nidField.value    = '';
+            // Hide any active alerts — no NID means no autofill or blacklist match
+            document.getElementById('autofill_banner').classList.remove('visible');
+            document.getElementById('blacklist_alert').classList.remove('visible');
         } else {
             pinSection.classList.add('hidden');
             nidField.disabled = false;
         }
     }
 
-    /* ── GROUP PAX ── */
-    function togglePax(cb) {
+    /* ── FORM-SIDE PAX SECTION ── */
+    function togglePaxFormSection(cb) {
         var paxSection = document.getElementById('pax_section');
         if (cb.checked) {
             paxSection.classList.remove('hidden');
@@ -332,7 +474,6 @@
         container.innerHTML = '';
         for (var i = 1; i <= count; i++) {
             var wrapper = document.createElement('div');
-
             var lbl = document.createElement('label');
             lbl.textContent = 'Associated visitor ' + i + ' — National ID *';
             lbl.style.marginTop = '6px';

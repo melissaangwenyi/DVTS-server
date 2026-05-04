@@ -1,57 +1,71 @@
 """
-server/app.py — Standalone Flask web app for the Visitor Tracking System
+server/app.py — Standalone Flask web app (v3)
 
-This is the standalone version. The desktop sync layer has been removed; the
-app now only serves the web interface (login, dashboard, reports, admin
-panels). The /api/health endpoint remains so Railway can health-check it.
+NEW IN v3:
+  - Reason for visit on check-in (free-text)
+  - Blacklist check on check-in (admin can override)
+  - Autofill API for repeat visitors
+  - Audit log writes on every important action + admin viewer page
+  - Per-host type (office/residential), with optional host_email
+  - Email notification to host on check-in (Gmail SMTP, opt-in via env vars)
+  - CSV export for reports
+  - Blacklist admin page
 """
 
+import csv
+import io
 import os
 import sys
 import uuid
 from datetime import datetime, timezone, timedelta
 from functools import wraps
 
-# Nairobi is UTC+3 — all timestamps are stored and displayed in EAT
 EAT = timezone(timedelta(hours=3))
 
 
 def now_eat() -> str:
-    """Current Nairobi time as a 'YYYY-MM-DD HH:MM:SS' string."""
     return datetime.now(EAT).strftime("%Y-%m-%d %H:%M:%S")
 
 
 from flask import (
-    Flask, render_template, request, redirect, url_for, session, flash
+    Flask, render_template, request, redirect, url_for, session, flash,
+    jsonify, Response,
 )
 
+# Make local packages (api/, data/) importable regardless of working directory.
+# Must come BEFORE local imports so both Python runtime and Pylance find them.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from api.routes import api_bp
-from data.server_db import (
+from api.routes import api_bp  # noqa: E402
+from data.server_db import (  # noqa: E402
     init_server_db,
-    get_active_visits_server,
-    get_filtered_history,
-    get_stats_server,
-    web_checkout,
-    upsert_visit,
-    upsert_passenger,
-    verify_guard_web,
-    get_all_guards_server,
-    add_guard_server,
-    toggle_guard_server,
+    get_active_visits_server, get_filtered_history, get_stats_server,
+    get_active_units, web_checkout, upsert_visit, upsert_passenger,
+    verify_guard_web, get_visit_for_audit,
+    get_all_guards_server, add_guard_server, toggle_guard_server,
     reset_guard_password_server,
-    get_all_residents_server,
-    add_resident_server,
-    update_resident_server,
-    toggle_resident_server,
+    get_all_residents_server, get_active_hosts_for_dropdown,
+    add_resident_server, update_resident_server, toggle_resident_server,
+    record_audit, get_audit_log,
+    check_blacklist, add_blacklist, remove_blacklist, get_all_blacklist,
+    find_visitor_by_national_id,
+    get_host_by_unit,
 )
+# email_service loaded via importlib — avoids Pylance "unresolved import" warning.
+# Works identically at runtime; send_host_notification returns False if SMTP not configured.
+import importlib.util as _ilu
+_es_spec = _ilu.spec_from_file_location(
+    "email_service",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "email_service.py")
+)
+_es_mod = _ilu.module_from_spec(_es_spec)
+_es_spec.loader.exec_module(_es_mod)
+send_host_notification = _es_mod.send_host_notification
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "vts-secret-key-change-in-production")
 app.register_blueprint(api_bp)
 
-# Build database tables on first boot
 try:
     init_server_db()
     print("[Startup] Database tables ready.")
@@ -71,7 +85,6 @@ def login_required(f):
 
 
 def admin_required(f):
-    """Only allows users whose role is 'admin'."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if "guard_name" not in session:
@@ -125,7 +138,24 @@ def is_overdue(category, check_in_str, estimated_minutes=None) -> bool:
         return False
 
 
-# ── AUTH ROUTES ────────────────────────────────────────────────────────────
+def _audit(action, target=None, details=None):
+    """Convenience wrapper — pulls actor info from session + IP from request."""
+    try:
+        record_audit(
+            actor_guard_id=session.get("guard_id"),
+            actor_name=session.get("guard_name", "anonymous"),
+            action=action,
+            target=target,
+            details=details,
+            ip_address=request.headers.get(
+                "X-Forwarded-For", request.remote_addr
+            ),
+        )
+    except Exception as e:
+        print(f"[Audit] _audit wrapper error: {e}")
+
+
+# ── AUTH ──────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
@@ -146,7 +176,20 @@ def login():
             session["username"]   = guard["username"]
             session["guard_id"]   = guard["guard_id"]
             session["role"]       = guard.get("role", "guard")
+            _audit("LOGIN_SUCCESS", target=username)
             return redirect(url_for("dashboard"))
+
+        # Audit failed attempt with username, no actor (no session yet)
+        try:
+            record_audit(
+                actor_guard_id=None, actor_name="anonymous",
+                action="LOGIN_FAILED", target=username,
+                ip_address=request.headers.get(
+                    "X-Forwarded-For", request.remote_addr
+                ),
+            )
+        except Exception:
+            pass
 
         return render_template(
             "login.html",
@@ -158,16 +201,20 @@ def login():
 
 @app.route("/logout")
 def logout():
+    _audit("LOGOUT")
     session.clear()
     return redirect(url_for("login"))
 
 
-# ── DASHBOARD ──────────────────────────────────────────────────────────────
+# ── DASHBOARD ─────────────────────────────────────────────────────────────
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    raw_visits = get_active_visits_server()
+    unit_filter = request.args.get("unit", "").strip() or None
+    raw_visits  = get_active_visits_server(host_unit_filter=unit_filter)
+    hosts       = get_active_hosts_for_dropdown()
+    units       = get_active_units()
 
     visits = []
     for v in raw_visits:
@@ -178,10 +225,42 @@ def dashboard():
         )
         visits.append(v)
 
-    return render_template("dashboard.html", visits=visits)
+    return render_template(
+        "dashboard.html",
+        visits=visits, hosts=hosts, units=units,
+        unit_filter=unit_filter or "",
+    )
 
 
-# ── CHECK-IN ───────────────────────────────────────────────────────────────
+# ── AUTOFILL API ──────────────────────────────────────────────────────────
+
+@app.route("/api/lookup-visitor")
+@login_required
+def lookup_visitor():
+    nid = request.args.get("nid", "").strip()
+    if not nid or not nid.isdigit() or len(nid) < 5:
+        return jsonify({"found": False})
+
+    visitor = find_visitor_by_national_id(nid)
+    flagged = check_blacklist(nid)
+
+    payload = {"found": False, "blacklisted": False}
+    if visitor:
+        payload.update({
+            "found":         True,
+            "full_name":     visitor.get("full_name", ""),
+            "phone_number":  visitor.get("phone_number", "") or "",
+            "vehicle_plate": visitor.get("vehicle_plate", "") or "",
+        })
+    if flagged:
+        payload.update({
+            "blacklisted":  True,
+            "blacklist_reason": flagged.get("reason", ""),
+        })
+    return jsonify(payload)
+
+
+# ── CHECK-IN ──────────────────────────────────────────────────────────────
 
 @app.route("/checkin", methods=["POST"])
 @login_required
@@ -192,8 +271,11 @@ def checkin():
     vehicle_plate   = request.form.get("vehicle_plate", "").strip()
     no_id           = request.form.get("no_id") == "on"
     host_pin        = request.form.get("host_pin",      "").strip()
+    host_unit       = request.form.get("host_unit",     "").strip()
+    reason          = request.form.get("reason",        "").strip()
     multi_pax       = request.form.get("multi_pax") == "on"
     pax_count_extra = int(request.form.get("pax_count", 1)) if multi_pax else 0
+    blacklist_override = request.form.get("blacklist_override") == "on"
 
     raw_category = request.form.get("category", "").strip()
     if raw_category == "Other":
@@ -214,24 +296,56 @@ def checkin():
     if not full_name or not category:
         flash("Full name and category are required.", "error")
         return redirect(url_for("dashboard"))
-
+    if not host_unit:
+        flash("Host unit/office is required for every visit.", "error")
+        return redirect(url_for("dashboard"))
     if not no_id and not national_id:
         flash("National ID is required (or tick 'Visitor has NO ID').", "error")
         return redirect(url_for("dashboard"))
-
     if not no_id and national_id and not national_id.isdigit():
         flash("National ID must contain only numbers.", "error")
         return redirect(url_for("dashboard"))
-
     if phone_number and not phone_number.isdigit():
         flash("Phone number must contain only numbers.", "error")
         return redirect(url_for("dashboard"))
-
     if no_id and not host_pin:
         flash("Host secret PIN is required for zero-trust entry.", "error")
         return redirect(url_for("dashboard"))
 
-    # Collect associated visitor IDs
+    # BLACKLIST CHECK
+    if not no_id and national_id:
+        flagged = check_blacklist(national_id)
+        if flagged and not blacklist_override:
+            flash(
+                f"⛔ BLOCKED: This visitor is on the blacklist. "
+                f"Reason: {flagged['reason']}. "
+                f"Only an admin can override this by re-submitting with the override box ticked.",
+                "error",
+            )
+            _audit(
+                "BLACKLIST_BLOCKED",
+                target=f"NID:{national_id}",
+                details=f"Visitor {full_name} blocked. Reason: {flagged['reason']}",
+            )
+            return redirect(url_for("dashboard"))
+        if flagged and blacklist_override:
+            if session.get("role") != "admin":
+                flash(
+                    "Only admins can override the blacklist. Visitor blocked.",
+                    "error",
+                )
+                _audit(
+                    "BLACKLIST_OVERRIDE_DENIED",
+                    target=f"NID:{national_id}",
+                    details=f"Non-admin tried to override block on {full_name}",
+                )
+                return redirect(url_for("dashboard"))
+            _audit(
+                "BLACKLIST_OVERRIDE",
+                target=f"NID:{national_id}",
+                details=f"Admin allowed {full_name} despite blacklist. Reason: {flagged['reason']}",
+            )
+
     passenger_ids = []
     if multi_pax:
         for i in range(1, pax_count_extra + 1):
@@ -258,23 +372,51 @@ def checkin():
         "estimated_minutes": estimated_minutes,
         "guard_id":          session.get("guard_id"),
         "resident_id":       None,
+        "host_unit":         host_unit or None,
+        "reason_for_visit":  reason or None,
     }
 
     success = upsert_visit(data)
-
     if success and passenger_ids:
         for pid in passenger_ids:
             upsert_passenger(log_uuid, pid)
 
     if success:
         flash(f"{full_name} checked in successfully.", "success")
+        _audit(
+            "CHECK_IN",
+            target=log_uuid,
+            details=f"{full_name} ({category}) at {host_unit}, "
+                    f"pax={total_pax}, reason={reason or '—'}",
+        )
+
+        # Email notification (best-effort, never blocks the flow)
+        try:
+            host_record = get_host_by_unit(host_unit)
+            if host_record and host_record.get("host_email"):
+                sent = send_host_notification(
+                    host_email=host_record["host_email"],
+                    host_name=host_record["full_name"],
+                    visitor_name=full_name,
+                    visitor_category=category,
+                    unit=host_unit,
+                    check_in_time=data["check_in_time"],
+                    reason=reason,
+                )
+                if sent:
+                    _audit(
+                        "EMAIL_SENT", target=host_record["host_email"],
+                        details=f"Host notification for visitor {full_name}",
+                    )
+        except Exception as e:
+            print(f"[Email] notification block failed: {e}")
     else:
         flash("Check-in failed. Please try again.", "error")
 
     return redirect(url_for("dashboard"))
 
 
-# ── CHECK-OUT ──────────────────────────────────────────────────────────────
+# ── CHECK-OUT ─────────────────────────────────────────────────────────────
 
 @app.route("/checkout", methods=["POST"])
 @login_required
@@ -284,9 +426,14 @@ def checkout():
         flash("Invalid checkout request.", "error")
         return redirect(url_for("dashboard"))
 
-    success = web_checkout(log_uuid)
+    visit_meta = get_visit_for_audit(log_uuid)
+    success = web_checkout(log_uuid, guard_id=session.get("guard_id"))
     if success:
         flash("Visitor checked out successfully.", "success")
+        _audit(
+            "CHECK_OUT", target=log_uuid,
+            details=f"{visit_meta['full_name']}" if visit_meta else log_uuid,
+        )
     else:
         flash("Checkout failed — visitor may already be checked out.", "error")
 
@@ -295,15 +442,24 @@ def checkout():
 
 # ── REPORTS ────────────────────────────────────────────────────────────────
 
+def _gather_report_filters():
+    return {
+        "category":  request.args.get("category",  "").strip() or None,
+        "date_from": request.args.get("date_from", "").strip() or None,
+        "date_to":   request.args.get("date_to",   "").strip() or None,
+        "time_from": request.args.get("time_from", "").strip() or None,
+        "time_to":   request.args.get("time_to",   "").strip() or None,
+        "host_unit": request.args.get("host_unit", "").strip() or None,
+    }
+
+
 @app.route("/reports")
 @login_required
 def reports():
-    category  = request.args.get("category",  "").strip() or None
-    date_from = request.args.get("date_from", "").strip() or None
-    date_to   = request.args.get("date_to",   "").strip() or None
-
-    raw_history = get_filtered_history(category, date_from, date_to)
-    stats       = get_stats_server()
+    f = _gather_report_filters()
+    raw_history = get_filtered_history(**f)
+    stats = get_stats_server()
+    units = get_active_units()
 
     history = []
     for r in raw_history:
@@ -314,14 +470,65 @@ def reports():
         history.append(r)
 
     return render_template(
-        "reports.html",
-        history=history,
-        stats=stats,
+        "reports.html", history=history, stats=stats, units=units,
         request=request,
     )
 
 
-# ── MANAGE GUARDS (admin) ──────────────────────────────────────────────────
+@app.route("/reports/export.csv")
+@login_required
+def reports_export_csv():
+    f = _gather_report_filters()
+    raw_history = get_filtered_history(**f)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Name", "National ID", "Category", "Reason", "Unit",
+        "Pax", "Associated IDs",
+        "Check-in", "Check-out", "Duration (min)",
+        "Checked in by", "Checked out by",
+        "Was overdue", "No-ID entry",
+    ])
+
+    for r in raw_history:
+        # Compute duration in minutes for spreadsheet sorting
+        try:
+            ci = datetime.strptime(str(r["check_in_time"])[:19],  "%Y-%m-%d %H:%M:%S")
+            co = datetime.strptime(str(r["check_out_time"])[:19], "%Y-%m-%d %H:%M:%S")
+            dur_min = int((co - ci).total_seconds() / 60)
+        except Exception:
+            dur_min = ""
+
+        writer.writerow([
+            r.get("full_name", ""),
+            r.get("national_id", "") or "",
+            r.get("category", ""),
+            r.get("reason_for_visit", "") or "",
+            r.get("host_unit", "") or "",
+            r.get("pax_count", 1),
+            (r.get("pax_ids") or "").replace("|", ";") if r.get("pax_ids") != "—" else "",
+            r.get("check_in_time", ""),
+            r.get("check_out_time", ""),
+            dur_min,
+            r.get("checkin_guard_name", "") or "",
+            r.get("checkout_guard_name", "") or "",
+            "Yes" if r.get("was_overdue") else "No",
+            "Yes" if r.get("exception_flag") else "No",
+        ])
+
+    _audit("EXPORT_CSV", details=f"Exported {len(raw_history)} record(s)")
+
+    csv_bytes = output.getvalue().encode("utf-8-sig")  # BOM for Excel
+    filename  = f"vts-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        csv_bytes,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── MANAGE GUARDS ─────────────────────────────────────────────────────────
 
 @app.route("/manage-guards")
 @admin_required
@@ -348,6 +555,7 @@ def add_guard():
     success = add_guard_server(username, password, full_name, role)
     if success:
         flash(f"Guard '{username}' added successfully.", "success")
+        _audit("GUARD_ADD", target=username, details=f"role={role}")
     else:
         flash(f"Username '{username}' already exists.", "error")
     return redirect(url_for("manage_guards"))
@@ -356,8 +564,23 @@ def add_guard():
 @app.route("/manage-guards/toggle/<int:guard_id>", methods=["POST"])
 @admin_required
 def toggle_guard(guard_id):
-    new_state = toggle_guard_server(guard_id)
-    flash(f"Guard {'activated' if new_state else 'deactivated'}.", "success")
+    result = toggle_guard_server(
+        guard_id, requesting_guard_id=session.get("guard_id")
+    )
+    if result == "self":
+        flash(
+            "You cannot disable or re-enable your own account.",
+            "error",
+        )
+        _audit("GUARD_SELF_TOGGLE_BLOCKED", target=str(guard_id))
+    elif result is None:
+        flash("Toggle failed — please try again.", "error")
+    else:
+        flash(f"Guard {'activated' if result else 'deactivated'}.", "success")
+        _audit(
+            "GUARD_TOGGLE", target=str(guard_id),
+            details=f"new state: {'active' if result else 'inactive'}",
+        )
     return redirect(url_for("manage_guards"))
 
 
@@ -371,68 +594,178 @@ def reset_guard_password(guard_id):
     success = reset_guard_password_server(guard_id, new_pw)
     if success:
         flash("Password updated.", "success")
+        _audit("GUARD_PASSWORD_RESET", target=str(guard_id))
     else:
         flash("Failed to update password.", "error")
     return redirect(url_for("manage_guards"))
 
 
-# ── MANAGE RESIDENTS (admin) ───────────────────────────────────────────────
+# ── MANAGE HOSTS ──────────────────────────────────────────────────────────
 
-@app.route("/manage-residents")
+@app.route("/manage-hosts")
 @admin_required
-def manage_residents():
-    residents = get_all_residents_server()
-    return render_template("manage_residents.html", residents=residents)
+def manage_hosts():
+    unit_filter = request.args.get("unit", "").strip() or None
+    type_filter = request.args.get("type", "").strip() or None
+    all_hosts   = get_all_residents_server()
+
+    hosts = all_hosts
+    if unit_filter:
+        hosts = [h for h in hosts
+                 if unit_filter.lower() in (h["unit_number"] or "").lower()]
+    if type_filter in ("office", "residential"):
+        hosts = [h for h in hosts if h.get("host_type") == type_filter]
+
+    units = sorted({h["unit_number"] for h in all_hosts if h["unit_number"]})
+    return render_template(
+        "manage_hosts.html", hosts=hosts, units=units,
+        unit_filter=unit_filter or "", type_filter=type_filter or "",
+    )
 
 
-@app.route("/manage-residents/add", methods=["POST"])
+@app.route("/manage-hosts/add", methods=["POST"])
 @admin_required
-def add_resident():
+def add_host():
     full_name   = request.form.get("full_name",   "").strip()
     unit_number = request.form.get("unit_number", "").strip()
     host_pin    = request.form.get("host_pin",    "").strip()
     phone       = request.form.get("phone",       "").strip()
+    host_type   = request.form.get("host_type",   "residential").strip()
+    host_email  = request.form.get("host_email",  "").strip()
 
     if not full_name or not unit_number or not host_pin:
         flash("Full name, unit, and PIN are required.", "error")
-        return redirect(url_for("manage_residents"))
+        return redirect(url_for("manage_hosts"))
 
-    success = add_resident_server(full_name, unit_number, host_pin, phone)
+    if host_email and "@" not in host_email:
+        flash("Email looks invalid. Please enter a valid email or leave it blank.", "error")
+        return redirect(url_for("manage_hosts"))
+
+    success = add_resident_server(
+        full_name, unit_number, host_pin, phone, host_type, host_email,
+    )
     if success:
-        flash(f"Resident '{full_name}' added.", "success")
+        flash(f"Host '{full_name}' added.", "success")
+        _audit(
+            "HOST_ADD", target=unit_number,
+            details=f"{full_name} ({host_type}), email: {host_email or '—'}",
+        )
     else:
         flash(f"PIN '{host_pin}' already exists. Choose a different PIN.", "error")
-    return redirect(url_for("manage_residents"))
+    return redirect(url_for("manage_hosts"))
 
 
-@app.route("/manage-residents/toggle/<int:resident_id>", methods=["POST"])
+@app.route("/manage-hosts/toggle/<int:host_id>", methods=["POST"])
 @admin_required
-def toggle_resident(resident_id):
-    new_state = toggle_resident_server(resident_id)
-    flash(f"Resident {'activated' if new_state else 'deactivated'}.", "success")
-    return redirect(url_for("manage_residents"))
+def toggle_host(host_id):
+    new_state = toggle_resident_server(host_id)
+    flash(f"Host {'activated' if new_state else 'deactivated'}.", "success")
+    _audit(
+        "HOST_TOGGLE", target=str(host_id),
+        details=f"new state: {'active' if new_state else 'inactive'}",
+    )
+    return redirect(url_for("manage_hosts"))
 
 
-@app.route("/manage-residents/edit/<int:resident_id>", methods=["POST"])
+@app.route("/manage-hosts/edit/<int:host_id>", methods=["POST"])
 @admin_required
-def edit_resident(resident_id):
+def edit_host(host_id):
     full_name   = request.form.get("full_name",   "").strip()
     unit_number = request.form.get("unit_number", "").strip()
     phone       = request.form.get("phone",       "").strip()
+    host_type   = request.form.get("host_type",   "").strip() or None
+    host_email  = request.form.get("host_email",  "").strip()
 
     if not full_name or not unit_number:
         flash("Full name and unit are required.", "error")
-        return redirect(url_for("manage_residents"))
+        return redirect(url_for("manage_hosts"))
 
-    success = update_resident_server(resident_id, full_name, unit_number, phone)
+    success = update_resident_server(
+        host_id, full_name, unit_number, phone, host_type, host_email,
+    )
     if success:
-        flash("Resident updated.", "success")
+        flash("Host updated.", "success")
+        _audit("HOST_EDIT", target=str(host_id),
+               details=f"{full_name} @ {unit_number}")
     else:
         flash("Update failed.", "error")
-    return redirect(url_for("manage_residents"))
+    return redirect(url_for("manage_hosts"))
 
 
-# ── STARTUP ────────────────────────────────────────────────────────────────
+# Backwards-compat
+@app.route("/manage-residents")
+@admin_required
+def manage_residents_legacy():
+    return redirect(url_for("manage_hosts"))
+
+
+# ── BLACKLIST ─────────────────────────────────────────────────────────────
+
+@app.route("/blacklist")
+@admin_required
+def blacklist():
+    entries = get_all_blacklist()
+    return render_template("blacklist.html", entries=entries)
+
+
+@app.route("/blacklist/add", methods=["POST"])
+@admin_required
+def blacklist_add():
+    national_id = request.form.get("national_id", "").strip()
+    full_name   = request.form.get("full_name",   "").strip()
+    reason      = request.form.get("reason",      "").strip()
+
+    if not national_id or not reason:
+        flash("National ID and reason are required.", "error")
+        return redirect(url_for("blacklist"))
+    if not national_id.isdigit():
+        flash("National ID must be numeric only.", "error")
+        return redirect(url_for("blacklist"))
+
+    success = add_blacklist(
+        national_id, full_name, reason, session.get("guard_id"),
+    )
+    if success:
+        flash(f"NID {national_id} added to blacklist.", "success")
+        _audit(
+            "BLACKLIST_ADD", target=f"NID:{national_id}",
+            details=f"{full_name or '—'} | reason: {reason}",
+        )
+    else:
+        flash("Failed to add to blacklist.", "error")
+    return redirect(url_for("blacklist"))
+
+
+@app.route("/blacklist/remove/<int:bl_id>", methods=["POST"])
+@admin_required
+def blacklist_remove(bl_id):
+    success = remove_blacklist(bl_id)
+    if success:
+        flash("Removed from blacklist.", "success")
+        _audit("BLACKLIST_REMOVE", target=str(bl_id))
+    else:
+        flash("Failed to remove.", "error")
+    return redirect(url_for("blacklist"))
+
+
+# ── AUDIT LOG ─────────────────────────────────────────────────────────────
+
+@app.route("/audit-log")
+@admin_required
+def audit_log():
+    action_filter = request.args.get("action", "").strip() or None
+    actor_filter  = request.args.get("actor",  "").strip() or None
+    entries       = get_audit_log(
+        limit=300, action_filter=action_filter, actor_filter=actor_filter,
+    )
+    return render_template(
+        "audit_log.html", entries=entries,
+        action_filter=action_filter or "",
+        actor_filter=actor_filter or "",
+    )
+
+
+# ── STARTUP ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

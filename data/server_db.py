@@ -1,29 +1,18 @@
 """
 =============================================================================
-server/data/server_db.py  —  PostgreSQL data layer (Railway)
+server/data/server_db.py  —  PostgreSQL data layer (v3)
 
-This is the standalone web-app version. The desktop sync layer has been
-removed, but the underlying tables and write helpers are unchanged because the
-web check-in/check-out flow uses the same schema.
+NEW IN v3:
+  • residents table → adds host_type ('office' | 'residential') + host_email
+  • visit_logs     → adds reason_for_visit
+  • audit_log      → NEW table, every important action recorded
+  • blacklist      → NEW table, flag visitors by national_id
+  • Repeat-visitor lookup (by national_id) for autofill
+  • Audit helpers (record_audit, get_audit_log)
+  • Blacklist helpers (add/remove/list/check)
+  • Host email lookup (used for SMTP notification)
 
-Functions used by app.py:
-  init_server_db                 — create tables on first boot
-  upsert_visit                   — insert visitor + visit log (web check-in)
-  upsert_passenger               — insert associated passenger row
-  web_checkout                   — stamp check_out_time
-  get_active_visits_server       — dashboard table
-  get_visit_history_server       — full history (unfiltered)
-  get_filtered_history           — reports page (with filters + overdue flag)
-  get_stats_server               — top-of-page metric cards
-  verify_guard_web               — login auth
-  get_all_guards_server          — admin: list guards
-  add_guard_server               — admin: add guard
-  toggle_guard_server            — admin: activate/deactivate
-  reset_guard_password_server    — admin: change password
-  get_all_residents_server       — admin: list residents
-  add_resident_server            — admin: add resident
-  update_resident_server         — admin: edit resident
-  toggle_resident_server         — admin: activate/deactivate
+ALL schema migrations use ADD COLUMN IF NOT EXISTS — safe on every boot.
 =============================================================================
 """
 
@@ -37,12 +26,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 def get_connection():
     if not DATABASE_URL:
-        raise RuntimeError(
-            "DATABASE_URL environment variable is not set.\n"
-            "On Railway: add a PostgreSQL database to your project and Railway "
-            "will inject DATABASE_URL automatically. For local dev, export it "
-            "yourself before running app.py."
-        )
+        raise RuntimeError("DATABASE_URL environment variable is not set.")
     return psycopg2.connect(
         DATABASE_URL,
         cursor_factory=psycopg2.extras.RealDictCursor,
@@ -52,13 +36,10 @@ def get_connection():
 # ── SCHEMA ─────────────────────────────────────────────────────────────────
 
 def init_server_db():
-    """
-    Creates all tables if they don't exist. Safe to run on every boot.
-    """
     conn = get_connection()
     cur  = conn.cursor()
 
-    # Guards (web users)
+    # Guards
     cur.execute("""
         CREATE TABLE IF NOT EXISTS guards (
             guard_id   SERIAL PRIMARY KEY,
@@ -81,7 +62,6 @@ def init_server_db():
         except Exception:
             conn.rollback()
 
-    # Default admin user — password "admin123" — change immediately in prod
     default_pw = hashlib.sha256(b"admin123").hexdigest()
     cur.execute("""
         INSERT INTO guards (username, full_name, password, role, is_active)
@@ -89,7 +69,7 @@ def init_server_db():
         ON CONFLICT (username) DO NOTHING
     """, (default_pw,))
 
-    # Residents
+    # Hosts (table still named "residents" for backwards compat)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS residents (
             resident_id SERIAL PRIMARY KEY,
@@ -97,9 +77,21 @@ def init_server_db():
             unit_number TEXT NOT NULL,
             host_pin    TEXT NOT NULL UNIQUE,
             phone       TEXT,
+            host_type   TEXT NOT NULL DEFAULT 'residential',
+            host_email  TEXT,
             is_active   BOOLEAN NOT NULL DEFAULT TRUE
         )
     """)
+    for col, definition in [
+        ("host_type",  "TEXT NOT NULL DEFAULT 'residential'"),
+        ("host_email", "TEXT"),
+    ]:
+        try:
+            cur.execute(
+                f"ALTER TABLE residents ADD COLUMN IF NOT EXISTS {col} {definition}"
+            )
+        except Exception:
+            conn.rollback()
 
     # Visitors
     cur.execute("""
@@ -126,11 +118,25 @@ def init_server_db():
             estimated_minutes INTEGER,
             check_in_time     TEXT    NOT NULL,
             check_out_time    TEXT,
+            checkout_guard_id INTEGER,
+            host_unit         TEXT,
+            reason_for_visit  TEXT,
             created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """)
+    for col, definition in [
+        ("checkout_guard_id", "INTEGER"),
+        ("host_unit",         "TEXT"),
+        ("reason_for_visit",  "TEXT"),
+    ]:
+        try:
+            cur.execute(
+                f"ALTER TABLE visit_logs ADD COLUMN IF NOT EXISTS {col} {definition}"
+            )
+        except Exception:
+            conn.rollback()
 
-    # Associated passengers (multi-pax check-ins)
+    # Associated passengers
     cur.execute("""
         CREATE TABLE IF NOT EXISTS associated_passengers (
             id          SERIAL PRIMARY KEY,
@@ -141,16 +147,238 @@ def init_server_db():
         )
     """)
 
+    # Audit log — append-only record of every important action
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id           SERIAL PRIMARY KEY,
+            occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            actor_guard  INTEGER,
+            actor_name   TEXT,
+            action       TEXT NOT NULL,
+            target       TEXT,
+            details      TEXT,
+            ip_address   TEXT
+        )
+    """)
+
+    # Blacklist — flagged national IDs
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS blacklist (
+            id          SERIAL PRIMARY KEY,
+            national_id TEXT NOT NULL UNIQUE,
+            full_name   TEXT,
+            reason      TEXT NOT NULL,
+            added_by    INTEGER,
+            added_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            is_active   BOOLEAN NOT NULL DEFAULT TRUE
+        )
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
     print("[ServerDB] Tables verified/created successfully.")
 
 
-# ── WRITE OPERATIONS (used by web forms) ──────────────────────────────────
+# ── AUDIT LOG ─────────────────────────────────────────────────────────────
+
+def record_audit(actor_guard_id, actor_name: str, action: str,
+                 target: str = None, details: str = None,
+                 ip_address: str = None) -> bool:
+    """
+    Records an action to the audit log. Never raises — audit failures must
+    not block the action they're describing.
+    """
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO audit_log
+                (actor_guard, actor_name, action, target, details, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (actor_guard_id, actor_name, action, target, details, ip_address))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[Audit] record_audit error: {e}")
+        return False
+
+
+def get_audit_log(limit: int = 200, action_filter: str = None,
+                  actor_filter: str = None) -> list:
+    try:
+        conn  = get_connection()
+        cur   = conn.cursor()
+        query = """
+            SELECT id, occurred_at, actor_guard, actor_name,
+                   action, target, details, ip_address
+            FROM audit_log
+            WHERE 1=1
+        """
+        params = []
+        if action_filter:
+            query += " AND action ILIKE %s"
+            params.append(f"%{action_filter}%")
+        if actor_filter:
+            query += " AND actor_name ILIKE %s"
+            params.append(f"%{actor_filter}%")
+        query += " ORDER BY occurred_at DESC LIMIT %s"
+        params.append(limit)
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[Audit] get_audit_log error: {e}")
+        return []
+
+
+# ── BLACKLIST ─────────────────────────────────────────────────────────────
+
+def check_blacklist(national_id: str):
+    """Returns blacklist row dict if national_id is flagged, else None."""
+    if not national_id:
+        return None
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT id, national_id, full_name, reason, added_at
+            FROM blacklist
+            WHERE national_id = %s AND is_active = TRUE
+        """, (national_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[Blacklist] check error: {e}")
+        return None
+
+
+def add_blacklist(national_id: str, full_name: str,
+                  reason: str, added_by: int) -> bool:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO blacklist (national_id, full_name, reason, added_by)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (national_id) DO UPDATE SET
+                full_name  = EXCLUDED.full_name,
+                reason     = EXCLUDED.reason,
+                added_by   = EXCLUDED.added_by,
+                is_active  = TRUE,
+                added_at   = NOW()
+        """, (national_id, full_name, reason, added_by))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[Blacklist] add error: {e}")
+        return False
+
+
+def remove_blacklist(blacklist_id: int) -> bool:
+    """Soft-delete (sets is_active = FALSE) so audit history is preserved."""
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "UPDATE blacklist SET is_active = FALSE WHERE id = %s",
+            (blacklist_id,),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[Blacklist] remove error: {e}")
+        return False
+
+
+def get_all_blacklist() -> list:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT b.id, b.national_id, b.full_name, b.reason,
+                   b.added_at, b.is_active, g.full_name AS added_by_name
+            FROM blacklist b
+            LEFT JOIN guards g ON g.guard_id = b.added_by
+            WHERE b.is_active = TRUE
+            ORDER BY b.added_at DESC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[Blacklist] get_all error: {e}")
+        return []
+
+
+# ── REPEAT VISITOR AUTOFILL ───────────────────────────────────────────────
+
+def find_visitor_by_national_id(national_id: str):
+    """
+    Returns the most recent visitor record with this national_id (for
+    autofill). Returns None if no match.
+    """
+    if not national_id or not national_id.isdigit():
+        return None
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT v.full_name, v.phone_number, v.vehicle_plate
+            FROM visitors v
+            JOIN visit_logs vl ON vl.visitor_uuid = v.local_uuid
+            WHERE v.national_id = %s
+            ORDER BY vl.check_in_time DESC
+            LIMIT 1
+        """, (national_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[ServerDB] find_visitor error: {e}")
+        return None
+
+
+# ── HOST EMAIL LOOKUP (for notification) ──────────────────────────────────
+
+def get_host_by_unit(unit_number: str):
+    """Returns the active host record for a unit (used for email notifications)."""
+    if not unit_number:
+        return None
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT resident_id, full_name, unit_number, host_email,
+                   host_type, phone
+            FROM residents
+            WHERE unit_number = %s AND is_active = TRUE
+            LIMIT 1
+        """, (unit_number,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[ServerDB] get_host_by_unit error: {e}")
+        return None
+
+
+# ── WRITE OPERATIONS ──────────────────────────────────────────────────────
 
 def upsert_visit(data: dict) -> bool:
-    """Inserts visitor + visit log. Used by the web check-in form."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
@@ -168,33 +396,29 @@ def upsert_visit(data: dict) -> bool:
                 category       = EXCLUDED.category,
                 exception_flag = EXCLUDED.exception_flag
         """, (
-            data["visitor_uuid"],
-            data["full_name"],
-            data.get("national_id"),
-            data.get("phone_number"),
-            data.get("vehicle_plate"),
-            data["category"],
-            bool(data.get("exception_flag", False)),
+            data["visitor_uuid"], data["full_name"], data.get("national_id"),
+            data.get("phone_number"), data.get("vehicle_plate"),
+            data["category"], bool(data.get("exception_flag", False)),
         ))
 
         cur.execute("""
             INSERT INTO visit_logs
                 (local_uuid, visitor_uuid, guard_id, resident_id,
-                 pax_count, estimated_minutes, check_in_time, check_out_time)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                 pax_count, estimated_minutes, check_in_time, check_out_time,
+                 host_unit, reason_for_visit)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (local_uuid) DO UPDATE SET
                 check_out_time    = EXCLUDED.check_out_time,
                 pax_count         = EXCLUDED.pax_count,
-                estimated_minutes = EXCLUDED.estimated_minutes
+                estimated_minutes = EXCLUDED.estimated_minutes,
+                host_unit         = EXCLUDED.host_unit,
+                reason_for_visit  = EXCLUDED.reason_for_visit
         """, (
-            data["log_uuid"],
-            data["visitor_uuid"],
-            data.get("guard_id"),
-            data.get("resident_id"),
-            data.get("pax_count", 1),
-            data.get("estimated_minutes"),
-            data["check_in_time"],
-            data.get("check_out_time"),
+            data["log_uuid"], data["visitor_uuid"],
+            data.get("guard_id"), data.get("resident_id"),
+            data.get("pax_count", 1), data.get("estimated_minutes"),
+            data["check_in_time"], data.get("check_out_time"),
+            data.get("host_unit"), data.get("reason_for_visit"),
         ))
 
         conn.commit()
@@ -207,7 +431,6 @@ def upsert_visit(data: dict) -> bool:
 
 
 def upsert_passenger(log_uuid: str, national_id: str) -> bool:
-    """Inserts one associated-passenger row. Used by web multi-pax check-in."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
@@ -225,8 +448,7 @@ def upsert_passenger(log_uuid: str, national_id: str) -> bool:
         return False
 
 
-def web_checkout(log_uuid: str) -> bool:
-    """Stamps check_out_time in Nairobi time. Returns True if a row was updated."""
+def web_checkout(log_uuid: str, guard_id: int = None) -> bool:
     from datetime import datetime, timezone, timedelta
     eat = timezone(timedelta(hours=3))
     now_eat = datetime.now(eat).strftime("%Y-%m-%d %H:%M:%S")
@@ -235,9 +457,10 @@ def web_checkout(log_uuid: str) -> bool:
         cur  = conn.cursor()
         cur.execute("""
             UPDATE visit_logs
-            SET check_out_time = %s
+            SET check_out_time    = %s,
+                checkout_guard_id = %s
             WHERE local_uuid = %s AND check_out_time IS NULL
-        """, (now_eat, log_uuid))
+        """, (now_eat, guard_id, log_uuid))
         conn.commit()
         rows = cur.rowcount
         cur.close()
@@ -248,33 +471,56 @@ def web_checkout(log_uuid: str) -> bool:
         return False
 
 
-# ── READ OPERATIONS ───────────────────────────────────────────────────────
-
-def get_active_visits_server() -> list:
-    """Visitors currently on premises (check_out_time IS NULL)."""
+def get_visit_for_audit(log_uuid: str):
+    """Lightweight visitor name lookup for audit log details."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
+            SELECT v.full_name FROM visit_logs vl
+            JOIN visitors v ON v.local_uuid = vl.visitor_uuid
+            WHERE vl.local_uuid = %s
+        """, (log_uuid,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+# ── READ OPERATIONS ───────────────────────────────────────────────────────
+
+def get_active_visits_server(host_unit_filter: str = None) -> list:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        query = """
             SELECT
-                vl.local_uuid,
-                v.full_name,
-                v.category,
-                v.vehicle_plate,
-                vl.pax_count,
-                vl.check_in_time,
-                vl.estimated_minutes,
+                vl.local_uuid, v.full_name, v.category, v.vehicle_plate,
+                vl.pax_count, vl.check_in_time, vl.estimated_minutes,
+                vl.host_unit, vl.reason_for_visit,
                 v.exception_flag,
+                g_in.full_name AS checkin_guard_name,
                 COALESCE(STRING_AGG(ap.national_id, ' | '), '—') AS pax_ids
             FROM visit_logs vl
             JOIN visitors v ON v.local_uuid = vl.visitor_uuid
             LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
+            LEFT JOIN guards g_in ON g_in.guard_id = vl.guard_id
             WHERE vl.check_out_time IS NULL
+        """
+        params = []
+        if host_unit_filter:
+            query += " AND vl.host_unit ILIKE %s"
+            params.append(f"%{host_unit_filter}%")
+        query += """
             GROUP BY vl.local_uuid, v.full_name, v.category, v.vehicle_plate,
                      vl.pax_count, vl.check_in_time, vl.estimated_minutes,
-                     v.exception_flag
+                     vl.host_unit, vl.reason_for_visit,
+                     v.exception_flag, g_in.full_name
             ORDER BY vl.check_in_time DESC
-        """)
+        """
+        cur.execute(query, params)
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -284,59 +530,22 @@ def get_active_visits_server() -> list:
         return []
 
 
-def get_visit_history_server(limit: int = 200) -> list:
-    """Completed visits (check_out_time IS NOT NULL). Unfiltered."""
-    try:
-        conn = get_connection()
-        cur  = conn.cursor()
-        cur.execute("""
-            SELECT
-                vl.local_uuid,
-                v.full_name,
-                v.national_id,
-                v.category,
-                vl.pax_count,
-                vl.check_in_time,
-                vl.check_out_time,
-                v.exception_flag,
-                COALESCE(STRING_AGG(ap.national_id, ' | '), '—') AS pax_ids
-            FROM visit_logs vl
-            JOIN visitors v ON v.local_uuid = vl.visitor_uuid
-            LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
-            WHERE vl.check_out_time IS NOT NULL
-            GROUP BY vl.local_uuid, v.full_name, v.national_id, v.category,
-                     vl.pax_count, vl.check_in_time, vl.check_out_time,
-                     v.exception_flag
-            ORDER BY vl.check_in_time DESC
-            LIMIT %s
-        """, (limit,))
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return [dict(r) for r in rows]
-    except Exception as e:
-        print(f"[ServerDB] get_visit_history error: {e}")
-        return []
-
-
 def get_filtered_history(category: str = None,
-                         date_from: str = None,
-                         date_to: str = None,
-                         limit: int = 200) -> list:
-    """Reports page — completed visits with filters + was_overdue flag."""
+                         date_from: str = None, date_to: str = None,
+                         time_from: str = None, time_to: str = None,
+                         host_unit: str = None,
+                         limit: int = 500) -> list:
     try:
         conn  = get_connection()
         cur   = conn.cursor()
         query = """
             SELECT
-                vl.local_uuid,
-                v.full_name,
-                v.national_id,
-                v.category,
-                vl.pax_count,
-                vl.check_in_time,
-                vl.check_out_time,
+                vl.local_uuid, v.full_name, v.national_id, v.category,
+                vl.pax_count, vl.check_in_time, vl.check_out_time,
+                vl.host_unit, vl.reason_for_visit,
                 v.exception_flag,
+                g_in.full_name  AS checkin_guard_name,
+                g_out.full_name AS checkout_guard_name,
                 COALESCE(STRING_AGG(ap.national_id, ' | '), '—') AS pax_ids,
                 CASE
                     WHEN v.category = 'Delivery'
@@ -344,28 +553,33 @@ def get_filtered_history(category: str = None,
                          vl.check_out_time::timestamp -
                          vl.check_in_time::timestamp
                      )) / 60.0 > 20
-                    THEN TRUE
-                    ELSE FALSE
+                    THEN TRUE ELSE FALSE
                 END AS was_overdue
             FROM visit_logs vl
             JOIN visitors v ON v.local_uuid = vl.visitor_uuid
             LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
+            LEFT JOIN guards g_in  ON g_in.guard_id  = vl.guard_id
+            LEFT JOIN guards g_out ON g_out.guard_id = vl.checkout_guard_id
             WHERE vl.check_out_time IS NOT NULL
         """
         params = []
         if category:
-            query += " AND v.category = %s"
-            params.append(category)
+            query += " AND v.category = %s"; params.append(category)
         if date_from:
-            query += " AND vl.check_in_time::date >= %s"
-            params.append(date_from)
+            query += " AND vl.check_in_time::date >= %s"; params.append(date_from)
         if date_to:
-            query += " AND vl.check_in_time::date <= %s"
-            params.append(date_to)
+            query += " AND vl.check_in_time::date <= %s"; params.append(date_to)
+        if time_from:
+            query += " AND vl.check_in_time::time >= %s"; params.append(time_from)
+        if time_to:
+            query += " AND vl.check_in_time::time <= %s"; params.append(time_to)
+        if host_unit:
+            query += " AND vl.host_unit ILIKE %s"; params.append(f"%{host_unit}%")
         query += """
             GROUP BY vl.local_uuid, v.full_name, v.national_id, v.category,
                      vl.pax_count, vl.check_in_time, vl.check_out_time,
-                     v.exception_flag
+                     vl.host_unit, vl.reason_for_visit,
+                     v.exception_flag, g_in.full_name, g_out.full_name
             ORDER BY vl.check_in_time DESC
             LIMIT %s
         """
@@ -381,46 +595,56 @@ def get_filtered_history(category: str = None,
 
 
 def get_stats_server() -> dict:
-    """Counters for the top-of-page cards (total/today/active/by category)."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("SELECT COUNT(*) AS total FROM visit_logs")
         total = cur.fetchone()["total"]
-        cur.execute(
-            "SELECT COUNT(*) AS today FROM visit_logs "
-            "WHERE check_in_time::date = CURRENT_DATE"
-        )
+        cur.execute("SELECT COUNT(*) AS today FROM visit_logs "
+                    "WHERE check_in_time::date = CURRENT_DATE")
         today = cur.fetchone()["today"]
-        cur.execute(
-            "SELECT COUNT(*) AS active FROM visit_logs "
-            "WHERE check_out_time IS NULL"
-        )
+        cur.execute("SELECT COUNT(*) AS active FROM visit_logs "
+                    "WHERE check_out_time IS NULL")
         active = cur.fetchone()["active"]
         cur.execute("""
             SELECT v.category, COUNT(*) AS cnt
-            FROM visit_logs vl
-            JOIN visitors v ON v.local_uuid = vl.visitor_uuid
+            FROM visit_logs vl JOIN visitors v ON v.local_uuid = vl.visitor_uuid
             GROUP BY v.category
         """)
         by_cat = {row["category"]: row["cnt"] for row in cur.fetchall()}
         cur.close()
         conn.close()
-        return {
-            "total": total,
-            "today": today,
-            "active": active,
-            "by_category": by_cat,
-        }
+        return {"total": total, "today": today, "active": active,
+                "by_category": by_cat}
     except Exception as e:
         print(f"[ServerDB] get_stats error: {e}")
         return {"total": 0, "today": 0, "active": 0, "by_category": {}}
 
 
+def get_active_units() -> list:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT u FROM (
+                SELECT host_unit AS u FROM visit_logs WHERE host_unit IS NOT NULL
+                UNION
+                SELECT unit_number AS u FROM residents WHERE is_active = TRUE
+            ) sub WHERE u IS NOT NULL AND u <> ''
+            ORDER BY u
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [r["u"] for r in rows]
+    except Exception as e:
+        print(f"[ServerDB] get_active_units error: {e}")
+        return []
+
+
 # ── AUTH ──────────────────────────────────────────────────────────────────
 
 def verify_guard_web(username: str, password: str):
-    """Returns guard dict (with role) on valid credentials, else None."""
     hashed = hashlib.sha256(password.encode()).hexdigest()
     try:
         conn = get_connection()
@@ -428,9 +652,7 @@ def verify_guard_web(username: str, password: str):
         cur.execute("""
             SELECT guard_id, username, full_name, role
             FROM guards
-            WHERE username  = %s
-              AND password  = %s
-              AND is_active = TRUE
+            WHERE username = %s AND password = %s AND is_active = TRUE
         """, (username, hashed))
         guard = cur.fetchone()
         cur.close()
@@ -441,7 +663,7 @@ def verify_guard_web(username: str, password: str):
         return None
 
 
-# ── GUARD MANAGEMENT (admin panel) ────────────────────────────────────────
+# ── GUARD MANAGEMENT ──────────────────────────────────────────────────────
 
 def get_all_guards_server() -> list:
     try:
@@ -449,8 +671,7 @@ def get_all_guards_server() -> list:
         cur  = conn.cursor()
         cur.execute("""
             SELECT guard_id, username, full_name, role, is_active, created_at
-            FROM guards
-            ORDER BY guard_id
+            FROM guards ORDER BY guard_id
         """)
         rows = cur.fetchall()
         cur.close()
@@ -482,25 +703,24 @@ def add_guard_server(username: str, password: str,
         return False
 
 
-def toggle_guard_server(guard_id: int) -> bool:
-    """Flips is_active. Returns the new is_active state."""
+def toggle_guard_server(guard_id: int, requesting_guard_id: int = None):
+    if requesting_guard_id is not None and int(requesting_guard_id) == int(guard_id):
+        return "self"
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
-            UPDATE guards
-            SET is_active = NOT is_active
-            WHERE guard_id = %s
-            RETURNING is_active
+            UPDATE guards SET is_active = NOT is_active
+            WHERE guard_id = %s RETURNING is_active
         """, (guard_id,))
         result = cur.fetchone()
         conn.commit()
         cur.close()
         conn.close()
-        return bool(result["is_active"]) if result else False
+        return bool(result["is_active"]) if result else None
     except Exception as e:
         print(f"[ServerDB] toggle_guard error: {e}")
-        return False
+        return None
 
 
 def reset_guard_password_server(guard_id: int, new_password: str) -> bool:
@@ -508,10 +728,8 @@ def reset_guard_password_server(guard_id: int, new_password: str) -> bool:
     try:
         conn = get_connection()
         cur  = conn.cursor()
-        cur.execute(
-            "UPDATE guards SET password = %s WHERE guard_id = %s",
-            (hashed, guard_id),
-        )
+        cur.execute("UPDATE guards SET password = %s WHERE guard_id = %s",
+                    (hashed, guard_id))
         conn.commit()
         cur.close()
         conn.close()
@@ -521,16 +739,16 @@ def reset_guard_password_server(guard_id: int, new_password: str) -> bool:
         return False
 
 
-# ── RESIDENT MANAGEMENT (admin panel) ─────────────────────────────────────
+# ── HOST MANAGEMENT (table = residents, UI = Hosts) ───────────────────────
 
 def get_all_residents_server() -> list:
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
-            SELECT resident_id, full_name, unit_number, host_pin, phone, is_active
-            FROM residents
-            ORDER BY resident_id
+            SELECT resident_id, full_name, unit_number, host_pin, phone,
+                   host_type, host_email, is_active
+            FROM residents ORDER BY unit_number, resident_id
         """)
         rows = cur.fetchall()
         cur.close()
@@ -541,15 +759,40 @@ def get_all_residents_server() -> list:
         return []
 
 
-def add_resident_server(full_name: str, unit_number: str,
-                        host_pin: str, phone: str) -> bool:
+def get_active_hosts_for_dropdown() -> list:
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
-            INSERT INTO residents (full_name, unit_number, host_pin, phone)
-            VALUES (%s, %s, %s, %s)
-        """, (full_name, unit_number, host_pin, phone or None))
+            SELECT resident_id, full_name, unit_number, host_type
+            FROM residents
+            WHERE is_active = TRUE
+            ORDER BY unit_number, full_name
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[ServerDB] get_active_hosts_for_dropdown error: {e}")
+        return []
+
+
+def add_resident_server(full_name: str, unit_number: str,
+                        host_pin: str, phone: str,
+                        host_type: str = "residential",
+                        host_email: str = None) -> bool:
+    if host_type not in ("office", "residential"):
+        host_type = "residential"
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO residents
+                (full_name, unit_number, host_pin, phone, host_type, host_email)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (full_name, unit_number, host_pin, phone or None,
+              host_type, host_email or None))
         conn.commit()
         cur.close()
         conn.close()
@@ -562,15 +805,28 @@ def add_resident_server(full_name: str, unit_number: str,
 
 
 def update_resident_server(resident_id: int, full_name: str,
-                           unit_number: str, phone: str) -> bool:
+                           unit_number: str, phone: str,
+                           host_type: str = None,
+                           host_email: str = None) -> bool:
     try:
         conn = get_connection()
         cur  = conn.cursor()
-        cur.execute("""
-            UPDATE residents
-            SET full_name=%s, unit_number=%s, phone=%s
-            WHERE resident_id=%s
-        """, (full_name, unit_number, phone or None, resident_id))
+        if host_type and host_type in ("office", "residential"):
+            cur.execute("""
+                UPDATE residents
+                SET full_name=%s, unit_number=%s, phone=%s,
+                    host_type=%s, host_email=%s
+                WHERE resident_id=%s
+            """, (full_name, unit_number, phone or None,
+                  host_type, host_email or None, resident_id))
+        else:
+            cur.execute("""
+                UPDATE residents
+                SET full_name=%s, unit_number=%s, phone=%s,
+                    host_email=%s
+                WHERE resident_id=%s
+            """, (full_name, unit_number, phone or None,
+                  host_email or None, resident_id))
         conn.commit()
         cur.close()
         conn.close()
@@ -581,15 +837,12 @@ def update_resident_server(resident_id: int, full_name: str,
 
 
 def toggle_resident_server(resident_id: int) -> bool:
-    """Flips is_active. Returns the new state."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
-            UPDATE residents
-            SET is_active = NOT is_active
-            WHERE resident_id = %s
-            RETURNING is_active
+            UPDATE residents SET is_active = NOT is_active
+            WHERE resident_id = %s RETURNING is_active
         """, (resident_id,))
         result = cur.fetchone()
         conn.commit()

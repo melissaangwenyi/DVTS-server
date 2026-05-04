@@ -8,10 +8,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
 
-<!-- TOP BAR -->
 <div class="topbar">
     <div class="topbar-brand">
         <div class="logo-mark">🛡</div>
@@ -21,22 +21,26 @@
         </div>
     </div>
     <div class="topbar-right">
+        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="icon-moon">🌙</span>
+            <span class="icon-sun">☀</span>
+        </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
     </div>
 </div>
 
-<!-- NAVBAR -->
 <div class="navbar">
     <a href="/dashboard">🏠 Dashboard</a>
     <a href="/reports" class="active">📊 Reports</a>
     {% if session.get('role') == 'admin' %}
     <a href="/manage-guards">👮 Guards</a>
-    <a href="/manage-residents">🏡 Residents</a>
+    <a href="/manage-hosts">🏡 Hosts</a>
+    <a href="/blacklist">⛔ Blacklist</a>
+    <a href="/audit-log">📜 Audit log</a>
     {% endif %}
 </div>
 
-<!-- FLASH -->
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% for category, message in messages %}
         <div class="flash {{ category }}">{{ message }}</div>
@@ -45,7 +49,6 @@
 
 <div class="content">
 
-    <!-- STATS -->
     <div class="stats-row">
         <div class="stat-card">
             <div class="value">{{ stats.total }}</div>
@@ -73,13 +76,12 @@
         </div>
     </div>
 
-    <!-- LEGEND -->
     <div class="legend">
         <span class="legend-item"><span class="legend-dot red"></span>Delivery overdue (over 20 min)</span>
         <span class="legend-item">⚠ Zero-trust / no-ID entry</span>
+        <span class="legend-item" style="color: var(--text-muted);">Click pax count to reveal IDs</span>
     </div>
 
-    <!-- FILTERS -->
     <form method="GET" action="/reports">
         <div class="filters">
             <div class="field">
@@ -93,23 +95,44 @@
                 </select>
             </div>
             <div class="field">
-                <label>From (YYYY-MM-DD)</label>
-                <input type="text" name="date_from" placeholder="2026-01-01"
+                <label>Unit / office</label>
+                <select name="host_unit">
+                    <option value="">All units</option>
+                    {% for u in units %}
+                    <option value="{{ u }}" {{ 'selected' if request.args.get('host_unit')==u }}>{{ u }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label>Date from</label>
+                <input type="date" name="date_from"
                        value="{{ request.args.get('date_from', '') }}">
             </div>
             <div class="field">
-                <label>To (YYYY-MM-DD)</label>
-                <input type="text" name="date_to" placeholder="2026-12-31"
+                <label>Date to</label>
+                <input type="date" name="date_to"
                        value="{{ request.args.get('date_to', '') }}">
+            </div>
+            <div class="field">
+                <label>Time from</label>
+                <input type="time" name="time_from"
+                       value="{{ request.args.get('time_from', '') }}">
+            </div>
+            <div class="field">
+                <label>Time to</label>
+                <input type="time" name="time_to"
+                       value="{{ request.args.get('time_to', '') }}">
             </div>
             <div class="actions">
                 <button type="submit" class="btn">🔍 Filter</button>
                 <a href="/reports" class="btn-secondary btn">Clear</a>
+                <a href="{{ url_for('reports_export_csv', **request.args) }}" class="export-link">
+                    ⬇ CSV
+                </a>
             </div>
         </div>
     </form>
 
-    <!-- HISTORY TABLE -->
     <div class="table-wrap">
         {% if history %}
         <table>
@@ -118,11 +141,14 @@
                     <th>Name</th>
                     <th>National ID</th>
                     <th>Category</th>
+                    <th>Unit</th>
+                    <th>Reason</th>
                     <th>Pax</th>
-                    <th>Associated IDs</th>
                     <th>Check-in</th>
                     <th>Check-out</th>
                     <th>Duration</th>
+                    <th>Checked in by</th>
+                    <th>Checked out by</th>
                     <th>Note</th>
                 </tr>
             </thead>
@@ -139,11 +165,26 @@
                         <span class="badge badge-other">{{ r.category }}</span>
                         {% endif %}
                     </td>
-                    <td style="text-align:center;">{{ r.pax_count }}</td>
-                    <td class="pax-ids">{{ r.pax_ids or '—' }}</td>
+                    <td><code>{{ r.host_unit or '—' }}</code></td>
+                    <td style="font-size: 12px; color: var(--text-muted); max-width: 140px;">
+                        {{ r.reason_for_visit or '—' }}
+                    </td>
+                    <td>
+                        {% if r.pax_count > 1 and r.pax_ids and r.pax_ids != '—' %}
+                        <span class="pax-badge"
+                              onclick="togglePaxIds('rep-{{ loop.index }}', this)"
+                              title="Click to view IDs">
+                            👥 {{ r.pax_count }} <span class="chevron">▾</span>
+                        </span>
+                        {% else %}
+                        <span class="pax-badge no-pax">{{ r.pax_count }}</span>
+                        {% endif %}
+                    </td>
                     <td style="white-space: nowrap;">{{ r.check_in_display }}</td>
                     <td style="white-space: nowrap;">{{ r.check_out_display }}</td>
                     <td style="white-space: nowrap;">{{ r.duration }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ r.checkin_guard_name or '—' }}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">{{ r.checkout_guard_name or '—' }}</td>
                     <td>
                         {% if r.was_overdue %}<span style="font-weight: 600;">🔴 Overdue</span>
                         {% elif r.exception_flag %}<span style="color: var(--amber-strong);">⚠ No-ID</span>
@@ -151,6 +192,20 @@
                         {% endif %}
                     </td>
                 </tr>
+                {% if r.pax_count > 1 and r.pax_ids and r.pax_ids != '—' %}
+                <tr id="pax-rep-{{ loop.index }}" class="pax-detail-row hidden">
+                    <td colspan="12">
+                        <strong style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            Associated visitor IDs ({{ r.pax_count - 1 }}):
+                        </strong>
+                        <div class="pax-ids-list" style="margin-top: 6px;">
+                            {% for pid in r.pax_ids.split(' | ') %}
+                            <span class="pax-id-chip">{{ pid }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>
@@ -158,12 +213,21 @@
         {% else %}
         <div class="no-data">
             <span class="icon">📊</span>
-            No completed visits found.
+            No completed visits found for these filters.
         </div>
         {% endif %}
     </div>
 
 </div>
+
+<script>
+    function togglePaxIds(rowId, badgeEl) {
+        var row = document.getElementById('pax-' + rowId);
+        if (!row) return;
+        row.classList.toggle('hidden');
+        badgeEl.classList.toggle('expanded');
+    }
+</script>
 
 </body>
 </html>

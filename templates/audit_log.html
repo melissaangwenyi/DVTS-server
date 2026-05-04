@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTS — Audit Log</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="topbar-brand">
+        <div class="logo-mark">🛡</div>
+        <div class="brand-text">
+            <h1>Visitor Tracking System</h1>
+            <p>University of Nairobi</p>
+        </div>
+    </div>
+    <div class="topbar-right">
+        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="icon-moon">🌙</span>
+            <span class="icon-sun">☀</span>
+        </button>
+        <span class="guard-pill">👮 {{ session.guard_name }}</span>
+        <a href="/logout" class="logout">🔒 Logout</a>
+    </div>
+</div>
+
+<div class="navbar">
+    <a href="/dashboard">🏠 Dashboard</a>
+    <a href="/reports">📊 Reports</a>
+    <a href="/manage-guards">👮 Guards</a>
+    <a href="/manage-hosts">🏡 Hosts</a>
+    <a href="/blacklist">⛔ Blacklist</a>
+    <a href="/audit-log" class="active">📜 Audit log</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+{% endwith %}
+
+<div class="content">
+
+    <form method="GET" action="/audit-log">
+        <div class="filters">
+            <div class="field">
+                <label>Action contains</label>
+                <input type="text" name="action" value="{{ action_filter }}"
+                       placeholder="e.g. CHECK_IN, LOGIN, BLACKLIST">
+            </div>
+            <div class="field">
+                <label>Actor (guard) contains</label>
+                <input type="text" name="actor" value="{{ actor_filter }}"
+                       placeholder="e.g. Admin">
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn">🔍 Filter</button>
+                <a href="/audit-log" class="btn-secondary btn">Clear</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="table-wrap">
+        {% if entries %}
+        <table class="audit-table">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Target</th>
+                    <th>Details</th>
+                    <th>IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td style="white-space: nowrap; color: var(--text-muted);">
+                        {{ e.occurred_at.strftime('%d %b %Y  %H:%M:%S') if e.occurred_at else '—' }}
+                    </td>
+                    <td style="font-weight: 500;">{{ e.actor_name or '—' }}</td>
+                    <td>
+                        {% set act_lower = e.action|lower %}
+                        {% if 'login_failed' in act_lower or 'denied' in act_lower or 'blocked' in act_lower %}
+                            <span class="audit-action action-fail">{{ e.action }}</span>
+                        {% elif 'login' in act_lower %}
+                            <span class="audit-action action-login">{{ e.action }}</span>
+                        {% elif 'check_in' in act_lower %}
+                            <span class="audit-action action-checkin">{{ e.action }}</span>
+                        {% elif 'check_out' in act_lower %}
+                            <span class="audit-action action-checkout">{{ e.action }}</span>
+                        {% elif 'blacklist' in act_lower %}
+                            <span class="audit-action action-block">{{ e.action }}</span>
+                        {% elif 'add' in act_lower or 'edit' in act_lower or 'toggle' in act_lower or 'reset' in act_lower or 'override' in act_lower %}
+                            <span class="audit-action action-edit">{{ e.action }}</span>
+                        {% else %}
+                            <span class="audit-action">{{ e.action }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="color: var(--text-muted); font-size: 11px;">{{ e.target or '—' }}</td>
+                    <td style="font-family: 'Inter', sans-serif; font-size: 12px; max-width: 320px; word-break: break-word;">
+                        {{ e.details or '—' }}
+                    </td>
+                    <td style="color: var(--text-faint); font-size: 11px; white-space: nowrap;">
+                        {{ e.ip_address or '—' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="record-count">{{ entries|length }} action(s) shown · most recent first · last 300 actions max</div>
+        {% else %}
+        <div class="no-data">
+            <span class="icon">📜</span>
+            No audit entries match the current filter.
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTS — Blacklist</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="topbar-brand">
+        <div class="logo-mark">🛡</div>
+        <div class="brand-text">
+            <h1>Visitor Tracking System</h1>
+            <p>University of Nairobi</p>
+        </div>
+    </div>
+    <div class="topbar-right">
+        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="icon-moon">🌙</span>
+            <span class="icon-sun">☀</span>
+        </button>
+        <span class="guard-pill">👮 {{ session.guard_name }}</span>
+        <a href="/logout" class="logout">🔒 Logout</a>
+    </div>
+</div>
+
+<div class="navbar">
+    <a href="/dashboard">🏠 Dashboard</a>
+    <a href="/reports">📊 Reports</a>
+    <a href="/manage-guards">👮 Guards</a>
+    <a href="/manage-hosts">🏡 Hosts</a>
+    <a href="/blacklist" class="active">⛔ Blacklist</a>
+    <a href="/audit-log">📜 Audit log</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+{% endwith %}
+
+<div class="content">
+    <div class="admin-grid">
+
+        <div class="card">
+            <div class="card-header">
+                <h2>⛔ Blacklisted visitors</h2>
+                <span class="badge badge-status-inactive" style="background: var(--red-soft); color: var(--red-strong);">
+                    {{ entries|length }} flagged
+                </span>
+            </div>
+            <div class="table-wrap" style="border: none; border-radius: 0;">
+                {% if entries %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>National ID</th>
+                            <th>Name</th>
+                            <th>Reason</th>
+                            <th>Added by</th>
+                            <th>When</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in entries %}
+                        <tr>
+                            <td><code style="background: var(--red-soft); color: var(--red-strong);">{{ e.national_id }}</code></td>
+                            <td style="font-weight: 500;">{{ e.full_name or '—' }}</td>
+                            <td style="font-style: italic; color: var(--text-muted);">{{ e.reason }}</td>
+                            <td style="font-size: 12px; color: var(--text-muted);">{{ e.added_by_name or '—' }}</td>
+                            <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">
+                                {{ e.added_at.strftime('%d %b %Y  %H:%M') if e.added_at else '—' }}
+                            </td>
+                            <td>
+                                <form action="/blacklist/remove/{{ e.id }}"
+                                      method="POST"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Remove {{ e.national_id }} from the blacklist?');">
+                                    <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="no-data">
+                    <span class="icon">✅</span>
+                    No visitors are currently blacklisted.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>➕ Add to blacklist</h2></div>
+            <div class="card-body">
+                <form method="POST" action="/blacklist/add" autocomplete="off">
+                    <label>National ID *</label>
+                    <input type="text" name="national_id" required autocomplete="off"
+                           placeholder="Numbers only"
+                           oninput="this.value = this.value.replace(/\D/g, '');">
+
+                    <label>Visitor name (optional)</label>
+                    <input type="text" name="full_name" autocomplete="off"
+                           placeholder="Helps identify if NID gets re-used">
+
+                    <label>Reason *</label>
+                    <input type="text" name="reason" required autocomplete="off"
+                           placeholder="Why is this person being blocked?"
+                           maxlength="200">
+
+                    <button type="submit" class="btn">⛔ Add to blacklist</button>
+                </form>
+
+                <div class="info-note" style="margin-top: 18px;">
+                    <span>🔐</span>
+                    <span>When a blacklisted visitor tries to check in, their entry is blocked. An admin can override the block, but every override is recorded in the audit log.</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>
