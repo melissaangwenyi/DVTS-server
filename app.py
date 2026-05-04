@@ -32,9 +32,14 @@ from flask import (
     jsonify, Response,
 )
 
-# Make local packages (api/, data/) importable regardless of working directory.
-# Must come BEFORE local imports so both Python runtime and Pylance find them.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# ── Local package resolution ─────────────────────────────────────────────
+# Railway deploys to /app so __file__ == /app/app.py  and data/ is /app/data/
+# Locally __file__ may be /something/server/app.py    and data/ is /something/server/data/
+# In both cases os.path.dirname(__file__) is correct — we just insert it
+# explicitly so Python always finds the data/ and api/ packages.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
 
 from api.routes import api_bp  # noqa: E402
 from data.server_db import (  # noqa: E402
@@ -51,16 +56,14 @@ from data.server_db import (  # noqa: E402
     find_visitor_by_national_id,
     get_host_by_unit,
 )
-# email_service loaded via importlib — avoids Pylance "unresolved import" warning.
-# Works identically at runtime; send_host_notification returns False if SMTP not configured.
-import importlib.util as _ilu
-_es_spec = _ilu.spec_from_file_location(
-    "email_service",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "email_service.py")
-)
-_es_mod = _ilu.module_from_spec(_es_spec)
-_es_spec.loader.exec_module(_es_mod)
-send_host_notification = _es_mod.send_host_notification
+# Load email_service safely — if the import fails for any reason,
+# replace send_host_notification with a no-op so the app still boots.
+try:
+    from data.email_service import send_host_notification
+except ImportError:
+    def send_host_notification(*args, **kwargs):
+        print("[Email] email_service not found — notifications disabled.")
+        return False
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "vts-secret-key-change-in-production")
