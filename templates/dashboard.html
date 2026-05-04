@@ -2,358 +2,37 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VTS — Dashboard</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #1A1A2E;
-            color: #EAEAEA;
-            min-height: 100vh;
-        }
-
-        /* ── TOP BAR ── */
-        .topbar {
-            background: #0F3460;
-            border-bottom: 1px solid #2A2A4A;
-            padding: 12px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .topbar h1 { font-size: 18px; color: #E94560; font-weight: 700; }
-        .topbar .guard-info { font-size: 13px; color: #2ECC71; }
-        .topbar-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .logout {
-            background: #16213E;
-            color: #EAEAEA;
-            border: 1px solid #2A2A4A;
-            padding: 7px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            text-decoration: none;
-        }
-        .logout:hover { background: #2A2A4A; }
-
-        /* ── NAVBAR ── */
-        .navbar {
-            background: #16213E;
-            border-bottom: 1px solid #2A2A4A;
-            padding: 8px 24px;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .navbar a {
-            padding: 6px 16px;
-            border-radius: 5px;
-            font-size: 13px;
-            text-decoration: none;
-            color: #EAEAEA;
-            background: #0F3460;
-        }
-        .navbar a.active { background: #E94560; }
-        .navbar a:hover  { background: #2A2A4A; }
-
-        /* ── FLASH MESSAGES ── */
-        .flash {
-            padding: 12px 24px;
-            font-size: 13px;
-            font-weight: 600;
-        }
-        .flash.success {
-            background: #0a3a1a;
-            color: #2ECC71;
-            border-bottom: 1px solid #2ECC71;
-        }
-        .flash.error {
-            background: #4A0A0A;
-            color: #FF6B6B;
-            border-bottom: 1px solid #E74C3C;
-        }
-
-        /* ── MAIN LAYOUT ── */
-        .main {
-            display: grid;
-            grid-template-columns: 380px 1fr;
-            gap: 0;
-            min-height: calc(100vh - 90px);
-        }
-
-        /* ── LEFT PANEL ── */
-        .left-panel {
-            background: #16213E;
-            border-right: 1px solid #2A2A4A;
-            overflow-y: auto;
-            max-height: calc(100vh - 90px);
-        }
-        .panel-header {
-            background: #0F3460;
-            padding: 12px 16px;
-            font-size: 13px;
-            font-weight: 700;
-            color: #E94560;
-            border-bottom: 1px solid #2A2A4A;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        .form-body { padding: 16px; }
-        .section-title {
-            font-size: 12px;
-            font-weight: 700;
-            color: #F39C12;
-            margin: 18px 0 10px 0;
-            padding-bottom: 4px;
-            border-bottom: 1px solid #2A2A4A;
-        }
-
-        label {
-            display: block;
-            font-size: 12px;
-            color: #A0A0B0;
-            margin-bottom: 4px;
-        }
-        input[type="text"],
-        input[type="number"],
-        input[type="password"],
-        select {
-            width: 100%;
-            padding: 9px 12px;
-            background: #0F3460;
-            border: 1px solid #2A2A4A;
-            border-radius: 5px;
-            color: #EAEAEA;
-            font-size: 13px;
-            margin-bottom: 10px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        input:focus, select:focus { border-color: #E94560; }
-        input.error-field { border-color: #E74C3C; }
-
-        .field-error {
-            font-size: 11px;
-            color: #FF6B6B;
-            margin-top: -8px;
-            margin-bottom: 8px;
-            display: none;
-        }
-        .field-error.visible { display: block; }
-
-        .checkbox-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 10px;
-            cursor: pointer;
-            font-size: 13px;
-            color: #EAEAEA;
-        }
-        .checkbox-row input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-            accent-color: #E94560;
-            margin: 0;
-            margin-bottom: 0;
-        }
-        .hidden { display: none !important; }
-
-        .info-note {
-            font-size: 11px;
-            color: #A0A0B0;
-            background: #1A1A2E;
-            border: 1px solid #2A2A4A;
-            border-radius: 4px;
-            padding: 6px 10px;
-            margin-bottom: 10px;
-        }
-        .warning-label {
-            font-size: 12px;
-            color: #F39C12;
-            margin-bottom: 4px;
-        }
-
-        .submit-btn {
-            width: 100%;
-            padding: 13px;
-            background: #E94560;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            margin-top: 8px;
-            transition: background 0.2s;
-        }
-        .submit-btn:hover { background: #C73652; }
-
-        /* ── RIGHT PANEL ── */
-        .right-panel {
-            background: #16213E;
-            overflow-y: auto;
-            max-height: calc(100vh - 90px);
-            display: flex;
-            flex-direction: column;
-        }
-        .right-header {
-            background: #0F3460;
-            padding: 12px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #2A2A4A;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-        .right-header h2 { font-size: 14px; color: #2ECC71; font-weight: 700; }
-        .right-header .count { font-size: 13px; color: #A0A0B0; }
-
-        .legend {
-            padding: 8px 16px;
-            font-size: 11px;
-            color: #A0A0B0;
-            background: #16213E;
-            border-bottom: 1px solid #2A2A4A;
-        }
-
-        .table-wrap {
-            flex: 1;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-            min-width: 750px;
-        }
-        thead th {
-            background: #0F3460;
-            padding: 10px 12px;
-            text-align: left;
-            font-size: 12px;
-            color: #A0A0B0;
-            font-weight: 600;
-            border-bottom: 1px solid #2A2A4A;
-            white-space: nowrap;
-        }
-        tbody tr { border-bottom: 1px solid #2A2A4A; }
-        tbody tr:nth-child(even) { background: #16213E; }
-        tbody tr:nth-child(odd)  { background: #1A1A2E; }
-        tbody tr.overdue         { background: #4A0A0A; color: #E74C3C; }
-        tbody tr:hover           { background: #0F3460; }
-        tbody td                 { padding: 10px 12px; }
-
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        .badge-guest        { background: #1a3a5c; color: #5dade2; }
-        .badge-delivery     { background: #3a2a0a; color: #F39C12; }
-        .badge-maintenance  { background: #1a3a1a; color: #2ECC71; }
-        .badge-other        { background: #3a1a3a; color: #E94560; }
-
-        .checkout-btn {
-            background: #E94560;
-            color: white;
-            border: none;
-            padding: 5px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-        .checkout-btn:hover { background: #C73652; }
-
-        .no-visitors {
-            padding: 48px;
-            text-align: center;
-            color: #A0A0B0;
-        }
-
-        .action-bar {
-            padding: 10px 16px;
-            background: #0F3460;
-            border-top: 1px solid #2A2A4A;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        .refresh-btn {
-            background: #16213E;
-            color: #EAEAEA;
-            border: 1px solid #2A2A4A;
-            padding: 7px 14px;
-            border-radius: 5px;
-            font-size: 12px;
-            cursor: pointer;
-            text-decoration: none;
-        }
-        .refresh-btn:hover { background: #2A2A4A; }
-        .status-text { font-size: 12px; color: #A0A0B0; margin-left: auto; }
-
-        .pax-ids {
-            font-size: 11px;
-            color: #A0A0B0;
-            max-width: 160px;
-            word-break: break-word;
-        }
-
-        /* ── MOBILE ── */
-        @media (max-width: 768px) {
-            .main {
-                display: flex;
-                flex-direction: column;
-                min-height: auto;
-            }
-            .left-panel {
-                max-height: none;
-                border-right: none;
-                border-bottom: 2px solid #2A2A4A;
-            }
-            .right-panel {
-                max-height: none;
-                overflow-y: visible;
-            }
-            .table-wrap { overflow-x: auto; }
-            .topbar      { padding: 10px 16px; }
-            .form-body   { padding: 12px; }
-            .navbar      { padding: 8px 16px; }
-        }
-        @media (max-width: 480px) {
-            .topbar h1 { font-size: 15px; }
-            .navbar a  { padding: 6px 10px; font-size: 12px; }
-        }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
 
 <!-- TOP BAR -->
 <div class="topbar">
-    <h1>🛡 Digital Visitor Tracking System</h1>
+    <div class="topbar-brand">
+        <div class="logo-mark">🛡</div>
+        <div class="brand-text">
+            <h1>Visitor Tracking System</h1>
+            <p>University of Nairobi</p>
+        </div>
+    </div>
     <div class="topbar-right">
-        <span class="guard-info">👮 {{ session.guard_name }}</span>
+        <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
     </div>
 </div>
 
-<!-- NAV BAR — admin links only shown when role == 'admin' -->
+<!-- NAVBAR -->
 <div class="navbar">
     <a href="/dashboard" class="active">🏠 Dashboard</a>
-    <a href="/reports">📊 Visit Reports</a>
+    <a href="/reports">📊 Reports</a>
     {% if session.get('role') == 'admin' %}
-    <a href="/manage-guards">👮 Manage Guards</a>
-    <a href="/manage-residents">🏡 Manage Residents</a>
+    <a href="/manage-guards">👮 Guards</a>
+    <a href="/manage-residents">🏡 Residents</a>
     {% endif %}
 </div>
 
@@ -364,49 +43,39 @@
     {% endfor %}
 {% endwith %}
 
-<!-- MAIN CONTENT -->
-<div class="main">
+<!-- MAIN -->
+<div class="dashboard-main">
 
     <!-- LEFT: CHECK-IN FORM -->
     <div class="left-panel">
-        <div class="panel-header">➕ ADD VISITOR</div>
+        <div class="panel-header">➕ Add visitor</div>
         <div class="form-body">
-            <!--
-                autocomplete="off" on the whole form prevents the browser from
-                auto-filling the National ID field with the saved username.
-                Individual sensitive fields also carry autocomplete="off".
-            -->
             <form method="POST" action="/checkin" id="checkinForm" autocomplete="off">
 
-                <!-- SECTION A -->
-                <div class="section-title">A — Primary Details</div>
+                <div class="section-title">A — Primary details</div>
 
-                <label>Full Name *</label>
+                <label>Full name *</label>
                 <input type="text" name="full_name" id="full_name"
                        placeholder="Letters and spaces only"
                        autocomplete="off"
                        required oninput="enforceLetters(this, 'name_error')">
-                <div class="field-error" id="name_error">⚠ Full name must contain letters only.</div>
+                <div class="field-error" id="name_error">Full name must contain letters only.</div>
 
                 <label>National ID *</label>
-                <!--
-                    autocomplete="off" stops the browser inserting the saved
-                    username (e.g. "admin") into this field automatically.
-                -->
                 <input type="text" name="national_id" id="national_id"
                        placeholder="Numbers only"
                        autocomplete="off"
                        oninput="enforceDigits(this, 'nid_error')">
-                <div class="field-error" id="nid_error">⚠ National ID must contain numbers only.</div>
+                <div class="field-error" id="nid_error">National ID must contain numbers only.</div>
 
-                <label>Phone Number</label>
+                <label>Phone number</label>
                 <input type="text" name="phone_number" id="phone_number"
                        placeholder="e.g. 0712345678"
                        autocomplete="off"
                        oninput="enforceDigits(this, 'phone_error')">
-                <div class="field-error" id="phone_error">⚠ Phone number must contain numbers only.</div>
+                <div class="field-error" id="phone_error">Phone number must contain numbers only.</div>
 
-                <label>Vehicle Plate</label>
+                <label>Vehicle plate</label>
                 <input type="text" name="vehicle_plate" placeholder="e.g. KCA 001A"
                        autocomplete="off">
 
@@ -415,61 +84,56 @@
                         onchange="toggleCategoryOptions(this)">
                     <option value="">— Select category —</option>
                     <option value="Guest">Guest</option>
-                    <option value="Delivery">Delivery (20 min auto)</option>
+                    <option value="Delivery">Delivery (auto 20 min)</option>
                     <option value="Maintenance">Maintenance</option>
                     <option value="Other">Other...</option>
                 </select>
 
-                <!-- Delivery note -->
                 <div id="delivery_note" class="info-note hidden">
-                    ℹ Delivery is automatically set to 20 minutes. No input needed.
+                    <span>ℹ</span><span>Delivery is automatically capped at 20 minutes.</span>
                 </div>
 
-                <!-- Other: custom category -->
                 <div id="other_section" class="hidden">
-                    <label class="warning-label">Specify Category *</label>
+                    <label class="warning-label">Specify category *</label>
                     <input type="text" name="other_category" id="other_category"
                            placeholder="e.g. Contractor, Event"
                            autocomplete="off">
                 </div>
 
-                <!-- Estimated stay -->
                 <div id="duration_section" class="hidden">
-                    <label class="warning-label">Estimated Stay (Minutes) *</label>
+                    <label class="warning-label">Estimated stay (minutes) *</label>
                     <input type="number" name="estimated_minutes" id="estimated_minutes"
                            placeholder="e.g. 120" min="1"
                            autocomplete="off"
                            oninput="enforcePositiveInt(this, 'est_error')">
-                    <div class="field-error" id="est_error">⚠ Please enter a valid number of minutes.</div>
+                    <div class="field-error" id="est_error">Please enter a valid number of minutes.</div>
                 </div>
 
-                <!-- SECTION B -->
-                <div class="section-title">B — Zero-Trust Exception</div>
+                <div class="section-title">B — Zero-trust exception</div>
 
                 <label class="checkbox-row">
                     <input type="checkbox" id="no_id_check" name="no_id"
                            onchange="toggleNoId(this)">
-                    Visitor has NO ID
+                    Visitor has no ID
                 </label>
 
                 <div id="pin_section" class="hidden">
-                    <label class="warning-label">Host Secret PIN *</label>
+                    <label class="warning-label">Host secret PIN *</label>
                     <input type="password" name="host_pin"
                            placeholder="Enter host PIN"
                            autocomplete="off">
                 </div>
 
-                <!-- SECTION C -->
-                <div class="section-title">C — Group Check-In</div>
+                <div class="section-title">C — Group check-in</div>
 
                 <label class="checkbox-row">
                     <input type="checkbox" id="multi_pax" name="multi_pax"
                            onchange="togglePax(this)">
-                    Multiple Visitors
+                    Multiple visitors
                 </label>
 
                 <div id="pax_section" class="hidden">
-                    <label>Number of Extra Visitors</label>
+                    <label>Number of extra visitors</label>
                     <select id="pax_count" name="pax_count"
                             onchange="buildPaxFields(this.value)">
                         <option value="1">1</option>
@@ -481,22 +145,24 @@
                     <div id="pax_fields"></div>
                 </div>
 
-                <button type="submit" class="submit-btn">🔒 SECURE CHECK-IN</button>
+                <button type="submit" class="btn">🔒 Secure check-in</button>
             </form>
         </div>
     </div>
 
     <!-- RIGHT: ACTIVE OCCUPANCY -->
     <div class="right-panel">
-        <div class="right-header">
-            <h2>📋 ACTIVE OCCUPANCY</h2>
+        <div class="panel-header">
+            <span>📋 Active occupancy</span>
             <span class="count">{{ visits|length }} on premises</span>
         </div>
-        <div class="legend">
-            🔴 Red row = OVERDUE &nbsp;|&nbsp; ⚠ = Zero-Trust / No-ID entry
+
+        <div class="legend" style="margin: 14px 20px 0; border: 1px dashed var(--border); background: var(--surface-alt);">
+            <span class="legend-item"><span class="legend-dot red"></span>Overdue</span>
+            <span class="legend-item">⚠ Zero-trust / no-ID entry</span>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap" style="margin: 14px 20px 0; border: 1px solid var(--border); border-radius: var(--radius-md);">
         {% if visits %}
         <table>
             <thead>
@@ -504,9 +170,9 @@
                     <th>Name</th>
                     <th>Category</th>
                     <th>Pax</th>
-                    <th>Associated Visitor IDs</th>
+                    <th>Associated IDs</th>
                     <th>Plate</th>
-                    <th>Entry Time</th>
+                    <th>Entry</th>
                     <th>Duration</th>
                     <th>Note</th>
                     <th>Action</th>
@@ -515,7 +181,7 @@
             <tbody>
                 {% for v in visits %}
                 <tr class="{{ 'overdue' if v.overdue else '' }}">
-                    <td>{{ v.full_name }}</td>
+                    <td style="font-weight: 500;">{{ v.full_name }}</td>
                     <td>
                         {% set cat_lower = v.category|lower %}
                         {% if cat_lower in ['guest','delivery','maintenance'] %}
@@ -527,18 +193,19 @@
                     <td style="text-align:center;">{{ v.pax_count }}</td>
                     <td class="pax-ids">{{ v.pax_ids or '—' }}</td>
                     <td>{{ v.vehicle_plate or '—' }}</td>
-                    <td>{{ v.entry_display }}</td>
-                    <td>{{ v.duration }}</td>
+                    <td style="white-space: nowrap;">{{ v.entry_display }}</td>
+                    <td style="white-space: nowrap;">{{ v.duration }}</td>
                     <td>
-                        {% if v.overdue %}🔴 OVERDUE
-                        {% elif v.exception_flag %}⚠ NO-ID
+                        {% if v.overdue %}<span style="font-weight: 600;">🔴 Overdue</span>
+                        {% elif v.exception_flag %}<span style="color: var(--amber-strong);">⚠ No-ID</span>
+                        {% else %}—
                         {% endif %}
                     </td>
                     <td>
                         <form method="POST" action="/checkout"
                               onsubmit="return confirm('Check out {{ v.full_name }}?')">
                             <input type="hidden" name="log_uuid" value="{{ v.local_uuid }}">
-                            <button type="submit" class="checkout-btn">✅ Check Out</button>
+                            <button type="submit" class="btn btn-sm">✓ Check out</button>
                         </form>
                     </td>
                 </tr>
@@ -546,11 +213,14 @@
             </tbody>
         </table>
         {% else %}
-        <div class="no-visitors">No visitors currently on premises.</div>
+        <div class="no-data">
+            <span class="icon">👋</span>
+            No visitors currently on premises.
+        </div>
         {% endif %}
         </div>
 
-        <div class="action-bar">
+        <div class="action-bar" style="margin-top: 16px;">
             <a href="/dashboard" class="refresh-btn">🔄 Refresh</a>
             <span class="status-text">Auto-refreshes on page load</span>
         </div>
@@ -664,7 +334,7 @@
             var wrapper = document.createElement('div');
 
             var lbl = document.createElement('label');
-            lbl.textContent = 'Associated Visitor ' + i + ' — National ID *';
+            lbl.textContent = 'Associated visitor ' + i + ' — National ID *';
             lbl.style.marginTop = '6px';
 
             var inp = document.createElement('input');
@@ -679,8 +349,10 @@
                     var cleaned = input.value.replace(/\D/g, '');
                     if (input.value !== cleaned) {
                         input.value = cleaned;
-                        input.style.borderColor = '#E74C3C';
-                        setTimeout(function() { input.style.borderColor = ''; }, 2000);
+                        input.classList.add('error-field');
+                        setTimeout(function() {
+                            input.classList.remove('error-field');
+                        }, 2000);
                     }
                 });
             })(inp);

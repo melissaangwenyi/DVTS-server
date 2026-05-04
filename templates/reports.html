@@ -2,243 +2,46 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VTS — Visit Reports</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #1A1A2E;
-            color: #EAEAEA;
-            min-height: 100vh;
-        }
-
-        /* ── TOP BAR ── */
-        .topbar {
-            background: #0F3460;
-            border-bottom: 1px solid #2A2A4A;
-            padding: 12px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .topbar h1 { font-size: 18px; color: #E94560; font-weight: 700; }
-        .topbar .guard-info { font-size: 13px; color: #2ECC71; }
-        .topbar-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .logout {
-            background: #16213E;
-            color: #EAEAEA;
-            border: 1px solid #2A2A4A;
-            padding: 7px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            text-decoration: none;
-        }
-        .logout:hover { background: #2A2A4A; }
-
-        /* ── NAVBAR ── */
-        .navbar {
-            background: #16213E;
-            border-bottom: 1px solid #2A2A4A;
-            padding: 8px 24px;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .navbar a {
-            padding: 6px 16px;
-            border-radius: 5px;
-            font-size: 13px;
-            text-decoration: none;
-            color: #EAEAEA;
-            background: #0F3460;
-        }
-        .navbar a.active { background: #E94560; }
-        .navbar a:hover  { background: #2A2A4A; }
-
-        .content { padding: 20px 24px; }
-
-        /* ── STATS CARDS ── */
-        .stats-row {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        .stat-card {
-            background: #0F3460;
-            border: 1px solid #2A2A4A;
-            border-radius: 8px;
-            padding: 14px 20px;
-            min-width: 100px;
-            text-align: center;
-        }
-        .stat-card .value { font-size: 26px; font-weight: 700; color: #E94560; }
-        .stat-card .label { font-size: 11px; color: #A0A0B0; margin-top: 4px; }
-
-        /* ── LEGEND ── */
-        .legend {
-            background: #16213E;
-            border: 1px solid #2A2A4A;
-            border-radius: 6px;
-            padding: 8px 14px;
-            margin-bottom: 14px;
-            font-size: 11px;
-            color: #A0A0B0;
-        }
-
-        /* ── FILTERS ── */
-        .filters {
-            background: #16213E;
-            border: 1px solid #2A2A4A;
-            border-radius: 8px;
-            padding: 14px 16px;
-            margin-bottom: 18px;
-            display: flex;
-            gap: 16px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        .filters label {
-            display: block;
-            font-size: 12px;
-            color: #A0A0B0;
-            margin-bottom: 4px;
-        }
-        .filters select,
-        .filters input {
-            padding: 8px 12px;
-            background: #0F3460;
-            border: 1px solid #2A2A4A;
-            border-radius: 5px;
-            color: #EAEAEA;
-            font-size: 13px;
-            outline: none;
-        }
-        .filters select:focus, .filters input:focus { border-color: #E94560; }
-        .filter-btn {
-            padding: 8px 20px;
-            background: #E94560;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-        }
-        .filter-btn:hover { background: #C73652; }
-        .clear-btn {
-            padding: 8px 16px;
-            background: #16213E;
-            color: #EAEAEA;
-            border: 1px solid #2A2A4A;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 13px;
-            text-decoration: none;
-        }
-        .clear-btn:hover { background: #2A2A4A; }
-
-        /* ── TABLE ── */
-        .table-wrap {
-            background: #16213E;
-            border: 1px solid #2A2A4A;
-            border-radius: 8px;
-            overflow: hidden;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-            min-width: 960px;
-        }
-        thead th {
-            background: #0F3460;
-            padding: 10px 12px;
-            text-align: left;
-            font-size: 12px;
-            color: #A0A0B0;
-            font-weight: 600;
-            border-bottom: 1px solid #2A2A4A;
-            white-space: nowrap;
-        }
-        tbody tr { border-bottom: 1px solid #2A2A4A; }
-        tbody tr:nth-child(even)  { background: #16213E; }
-        tbody tr:nth-child(odd)   { background: #1A1A2E; }
-        /* Overdue rows — mirrors the live dashboard red highlight */
-        tbody tr.was-overdue      { background: #4A0A0A; color: #E74C3C; }
-        tbody tr:hover            { background: #0F3460; }
-        tbody td { padding: 10px 12px; }
-
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        .badge-guest        { background: #1a3a5c; color: #5dade2; }
-        .badge-delivery     { background: #3a2a0a; color: #F39C12; }
-        .badge-maintenance  { background: #1a3a1a; color: #2ECC71; }
-        .badge-other        { background: #3a1a3a; color: #E94560; }
-
-        .pax-ids {
-            font-size: 11px;
-            color: #A0A0B0;
-            max-width: 160px;
-            word-break: break-word;
-        }
-
-        .no-data {
-            padding: 48px;
-            text-align: center;
-            color: #A0A0B0;
-        }
-        .record-count {
-            padding: 10px 16px;
-            font-size: 12px;
-            color: #A0A0B0;
-            background: #0F3460;
-            border-top: 1px solid #2A2A4A;
-        }
-
-        /* ── MOBILE ── */
-        @media (max-width: 768px) {
-            .content { padding: 12px 16px; }
-            .topbar  { padding: 10px 16px; }
-            .navbar  { padding: 8px 16px; }
-            .filters { flex-direction: column; gap: 10px; }
-            .filters > div { width: 100%; }
-            .filters select,
-            .filters input  { width: 100%; }
-        }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
 
+<!-- TOP BAR -->
 <div class="topbar">
-    <h1>🛡 Digital Visitor Tracking System</h1>
+    <div class="topbar-brand">
+        <div class="logo-mark">🛡</div>
+        <div class="brand-text">
+            <h1>Visitor Tracking System</h1>
+            <p>University of Nairobi</p>
+        </div>
+    </div>
     <div class="topbar-right">
-        <span class="guard-info">👮 {{ session.guard_name }}</span>
+        <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
     </div>
 </div>
 
-<!-- NAV BAR — admin links only shown when role == 'admin' -->
+<!-- NAVBAR -->
 <div class="navbar">
     <a href="/dashboard">🏠 Dashboard</a>
-    <a href="/reports" class="active">📊 Visit Reports</a>
+    <a href="/reports" class="active">📊 Reports</a>
     {% if session.get('role') == 'admin' %}
-    <a href="/manage-guards">👮 Manage Guards</a>
-    <a href="/manage-residents">🏡 Manage Residents</a>
+    <a href="/manage-guards">👮 Guards</a>
+    <a href="/manage-residents">🏡 Residents</a>
     {% endif %}
 </div>
+
+<!-- FLASH -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+{% endwith %}
 
 <div class="content">
 
@@ -246,61 +49,63 @@
     <div class="stats-row">
         <div class="stat-card">
             <div class="value">{{ stats.total }}</div>
-            <div class="label">Total Visits</div>
+            <div class="label">Total visits</div>
         </div>
-        <div class="stat-card">
-            <div class="value" style="color:#2ECC71;">{{ stats.today }}</div>
+        <div class="stat-card tinted-teal">
+            <div class="value">{{ stats.today }}</div>
             <div class="label">Today</div>
         </div>
-        <div class="stat-card">
-            <div class="value" style="color:#F39C12;">{{ stats.active }}</div>
-            <div class="label">Active Now</div>
+        <div class="stat-card tinted-amber">
+            <div class="value">{{ stats.active }}</div>
+            <div class="label">Active now</div>
         </div>
-        <div class="stat-card">
-            <div class="value" style="color:#5dade2;">{{ stats.by_category.get('Guest', 0) }}</div>
+        <div class="stat-card tinted-blue">
+            <div class="value">{{ stats.by_category.get('Guest', 0) }}</div>
             <div class="label">Guests</div>
         </div>
-        <div class="stat-card">
-            <div class="value" style="color:#F39C12;">{{ stats.by_category.get('Delivery', 0) }}</div>
+        <div class="stat-card tinted-amber">
+            <div class="value">{{ stats.by_category.get('Delivery', 0) }}</div>
             <div class="label">Deliveries</div>
         </div>
-        <div class="stat-card">
-            <div class="value" style="color:#2ECC71;">{{ stats.by_category.get('Maintenance', 0) }}</div>
+        <div class="stat-card tinted-green">
+            <div class="value">{{ stats.by_category.get('Maintenance', 0) }}</div>
             <div class="label">Maintenance</div>
         </div>
     </div>
 
     <!-- LEGEND -->
     <div class="legend">
-        🔴 Red row = Delivery visitor was OVERDUE (stayed longer than 20 minutes) &nbsp;|&nbsp;
-        ⚠ = Zero-Trust / No-ID entry
+        <span class="legend-item"><span class="legend-dot red"></span>Delivery overdue (over 20 min)</span>
+        <span class="legend-item">⚠ Zero-trust / no-ID entry</span>
     </div>
 
     <!-- FILTERS -->
     <form method="GET" action="/reports">
         <div class="filters">
-            <div>
+            <div class="field">
                 <label>Category</label>
                 <select name="category">
-                    <option value="">All</option>
+                    <option value="">All categories</option>
                     <option value="Guest"       {{ 'selected' if request.args.get('category')=='Guest' }}>Guest</option>
                     <option value="Delivery"    {{ 'selected' if request.args.get('category')=='Delivery' }}>Delivery</option>
                     <option value="Maintenance" {{ 'selected' if request.args.get('category')=='Maintenance' }}>Maintenance</option>
                     <option value="Other"       {{ 'selected' if request.args.get('category')=='Other' }}>Other</option>
                 </select>
             </div>
-            <div>
+            <div class="field">
                 <label>From (YYYY-MM-DD)</label>
                 <input type="text" name="date_from" placeholder="2026-01-01"
                        value="{{ request.args.get('date_from', '') }}">
             </div>
-            <div>
+            <div class="field">
                 <label>To (YYYY-MM-DD)</label>
                 <input type="text" name="date_to" placeholder="2026-12-31"
                        value="{{ request.args.get('date_to', '') }}">
             </div>
-            <button type="submit" class="filter-btn">🔍 Filter</button>
-            <a href="/reports" class="clear-btn">Clear</a>
+            <div class="actions">
+                <button type="submit" class="btn">🔍 Filter</button>
+                <a href="/reports" class="btn-secondary btn">Clear</a>
+            </div>
         </div>
     </form>
 
@@ -314,21 +119,17 @@
                     <th>National ID</th>
                     <th>Category</th>
                     <th>Pax</th>
-                    <th>Associated Visitor IDs</th>
-                    <th>Check-In</th>
-                    <th>Check-Out</th>
+                    <th>Associated IDs</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
                     <th>Duration</th>
                     <th>Note</th>
                 </tr>
             </thead>
             <tbody>
                 {% for r in history %}
-                <!--
-                    was-overdue CSS class turns the row red, exactly like the
-                    live dashboard does for active overdue deliveries.
-                -->
                 <tr class="{{ 'was-overdue' if r.was_overdue else '' }}">
-                    <td>{{ r.full_name }}</td>
+                    <td style="font-weight: 500;">{{ r.full_name }}</td>
                     <td>{{ r.national_id or '—' }}</td>
                     <td>
                         {% set cat_lower = r.category|lower %}
@@ -340,12 +141,13 @@
                     </td>
                     <td style="text-align:center;">{{ r.pax_count }}</td>
                     <td class="pax-ids">{{ r.pax_ids or '—' }}</td>
-                    <td>{{ r.check_in_display }}</td>
-                    <td>{{ r.check_out_display }}</td>
-                    <td>{{ r.duration }}</td>
+                    <td style="white-space: nowrap;">{{ r.check_in_display }}</td>
+                    <td style="white-space: nowrap;">{{ r.check_out_display }}</td>
+                    <td style="white-space: nowrap;">{{ r.duration }}</td>
                     <td>
-                        {% if r.was_overdue %}🔴 OVERDUE
-                        {% elif r.exception_flag %}⚠ NO-ID
+                        {% if r.was_overdue %}<span style="font-weight: 600;">🔴 Overdue</span>
+                        {% elif r.exception_flag %}<span style="color: var(--amber-strong);">⚠ No-ID</span>
+                        {% else %}—
                         {% endif %}
                     </td>
                 </tr>
@@ -354,10 +156,14 @@
         </table>
         <div class="record-count">{{ history|length }} record(s) shown</div>
         {% else %}
-        <div class="no-data">No completed visits found.</div>
+        <div class="no-data">
+            <span class="icon">📊</span>
+            No completed visits found.
+        </div>
         {% endif %}
     </div>
 
 </div>
+
 </body>
 </html>

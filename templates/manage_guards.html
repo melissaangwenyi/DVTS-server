@@ -2,88 +2,126 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Manage Guards</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1A1A2E; color: #EAEAEA; margin:0; }
-        .topbar, .navbar { background: #0F3460; padding: 12px 24px; border-bottom: 1px solid #2A2A4A; }
-        .navbar a { padding: 6px 16px; margin-right: 8px; text-decoration: none; color: white; background: #16213E; border-radius: 5px;}
-        .navbar a.active { background: #E94560; }
-        .main { display: grid; grid-template-columns: 1fr 300px; gap: 20px; padding: 20px; }
-        table { width: 100%; border-collapse: collapse; background: #16213E; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #2A2A4A; }
-        th { background: #0F3460; }
-        .form-panel { background: #16213E; padding: 20px; border-radius: 8px; }
-        input, select { width: 100%; padding: 8px; margin-bottom: 10px; background: #0F3460; color: white; border: 1px solid #2A2A4A; }
-        button { width: 100%; padding: 10px; background: #E94560; color: white; border: none; cursor: pointer; border-radius: 5px;}
-        button:hover { background: #C73652; }
-        .flash { padding: 10px; margin: 10px 20px; border-radius: 5px; }
-        .success { background: #0a3a1a; color: #2ECC71; }
-        .error { background: #4A0A0A; color: #FF6B6B; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTS — Manage Guards</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <div class="topbar">
-        <h1>🛡 Manage Guards</h1>
-    </div>
-    <div class="navbar">
-        <a href="/dashboard">🏠 Dashboard</a>
-        <a href="/reports">📊 Visit Reports</a>
-        <a href="/manage-guards" class="active">👮 Manage Guards</a>
-        <a href="/manage-residents">🏡 Manage Residents</a>
-    </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
-    {% endwith %}
-
-    <div class="main">
-        <div>
-            <h2>Current Guards</h2>
-            <table>
-                <tr>
-                    <th>Username</th>
-                    <th>Full Name</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                </tr>
-                {% for guard in guards %}
-                <tr>
-                    <td>{{ guard.username }}</td>
-                    <td>{{ guard.full_name }}</td>
-                    <td>{{ guard.role }}</td>
-                    <td>{{ 'Active' if guard.is_active else 'Inactive' }}</td>
-                    <td>
-                        <form action="/manage-guards/toggle/{{ guard.guard_id }}" method="POST" style="display:inline;">
-                            <button type="submit" style="padding: 5px; width: auto; background: #2ECC71;">Toggle</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
-        
-        <div class="form-panel">
-            <h2>Add New Guard</h2>
-            <form method="POST" action="/manage-guards/add">
-                <label>Username *</label>
-                <input type="text" name="username" required>
-                
-                <label>Full Name *</label>
-                <input type="text" name="full_name" required>
-
-                <label>Password *</label>
-                <input type="password" name="password" required minlength="6">
-
-                <label>Role *</label>
-                <select name="role">
-                    <option value="guard">Guard</option>
-                    <option value="admin">Admin</option>
-                </select>
-
-                <button type="submit">➕ Add Guard</button>
-            </form>
+<div class="topbar">
+    <div class="topbar-brand">
+        <div class="logo-mark">🛡</div>
+        <div class="brand-text">
+            <h1>Visitor Tracking System</h1>
+            <p>University of Nairobi</p>
         </div>
     </div>
+    <div class="topbar-right">
+        <span class="guard-pill">👮 {{ session.guard_name }}</span>
+        <a href="/logout" class="logout">🔒 Logout</a>
+    </div>
+</div>
+
+<div class="navbar">
+    <a href="/dashboard">🏠 Dashboard</a>
+    <a href="/reports">📊 Reports</a>
+    <a href="/manage-guards" class="active">👮 Guards</a>
+    <a href="/manage-residents">🏡 Residents</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+{% endwith %}
+
+<div class="content">
+    <div class="admin-grid">
+
+        <!-- LEFT: GUARDS TABLE -->
+        <div class="card">
+            <div class="card-header">
+                <h2>👮 Current guards</h2>
+                <span class="badge badge-status-active">{{ guards|length }} total</span>
+            </div>
+            <div class="table-wrap" style="border: none; border-radius: 0;">
+                {% if guards %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Full name</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for guard in guards %}
+                        <tr>
+                            <td style="font-weight: 500;">{{ guard.username }}</td>
+                            <td>{{ guard.full_name }}</td>
+                            <td>
+                                {% if guard.role == 'admin' %}
+                                <span class="badge badge-delivery">Admin</span>
+                                {% else %}
+                                <span class="badge badge-guest">Guard</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if guard.is_active %}
+                                <span class="badge badge-status-active">● Active</span>
+                                {% else %}
+                                <span class="badge badge-status-inactive">○ Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form action="/manage-guards/toggle/{{ guard.guard_id }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-sm btn-secondary">Toggle</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="no-data">
+                    <span class="icon">👮</span>
+                    No guards registered yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- RIGHT: ADD GUARD FORM -->
+        <div class="card">
+            <div class="card-header"><h2>➕ Add guard</h2></div>
+            <div class="card-body">
+                <form method="POST" action="/manage-guards/add" autocomplete="off">
+                    <label>Username *</label>
+                    <input type="text" name="username" required autocomplete="off">
+
+                    <label>Full name *</label>
+                    <input type="text" name="full_name" required autocomplete="off">
+
+                    <label>Password *</label>
+                    <input type="password" name="password" required minlength="6"
+                           placeholder="At least 6 characters" autocomplete="new-password">
+
+                    <label>Role *</label>
+                    <select name="role">
+                        <option value="guard">Guard</option>
+                        <option value="admin">Admin</option>
+                    </select>
+
+                    <button type="submit" class="btn">➕ Add guard</button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+
 </body>
 </html>

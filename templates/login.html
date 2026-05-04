@@ -4,132 +4,123 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visitor Tracking System — Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #1A1A2E;
-            color: #EAEAEA;
-            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            padding: 20px;
+            background:
+                radial-gradient(circle at 15% 25%, rgba(0, 133, 100, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 85% 75%, rgba(0, 133, 100, 0.06) 0%, transparent 45%),
+                var(--bg);
+        }
+
+        .login-shell {
+            width: 100%;
+            max-width: 440px;
         }
 
         .login-box {
-            background: #16213E;
-            border: 1px solid #2A2A4A;
-            border-radius: 12px;
-            padding: 48px 40px;
-            width: 100%;
-            max-width: 420px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            padding: 40px 36px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
         }
 
-        .logo {
+        .logo-block {
             text-align: center;
             margin-bottom: 32px;
         }
 
-        .logo h1 {
+        .logo-mark-large {
+            width: 64px;
+            height: 64px;
+            background: var(--teal);
+            border-radius: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 30px;
+            margin-bottom: 16px;
+            box-shadow: 0 6px 16px rgba(0, 133, 100, 0.3);
+        }
+
+        .logo-block h1 {
             font-size: 20px;
-            color: #E94560;
-            font-weight: 700;
+            font-weight: 600;
+            color: var(--text);
             margin-bottom: 6px;
         }
-
-        .logo p {
+        .logo-block p {
             font-size: 13px;
-            color: #A0A0B0;
+            color: var(--text-muted);
         }
 
-        label {
-            display: block;
-            font-size: 13px;
-            color: #A0A0B0;
-            margin-bottom: 6px;
-        }
+        .login-box .btn { margin-top: 6px; }
 
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 12px 14px;
-            background: #0F3460;
-            border: 1px solid #2A2A4A;
-            border-radius: 6px;
-            color: #EAEAEA;
-            font-size: 14px;
-            margin-bottom: 20px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        input:focus {
-            border-color: #E94560;
-        }
-
-        button[type="submit"] {
-            width: 100%;
-            padding: 13px;
-            background: #E94560;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 15px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button[type="submit"]:hover {
-            background: #C73652;
-        }
-
-        .error {
-            background: #4A0A0A;
-            color: #FF6B6B;
-            border: 1px solid #E74C3C;
-            border-radius: 6px;
-            padding: 10px 14px;
-            margin-bottom: 20px;
-            font-size: 13px;
-        }
-
-        footer {
-            margin-top: 32px;
-            font-size: 12px;
-            color: #A0A0B0;
+        .footer {
+            margin-top: 28px;
             text-align: center;
+            font-size: 11px;
+            color: var(--text-faint);
+            line-height: 1.6;
+        }
+        .footer .divider {
+            display: inline-block;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--text-faint);
+            vertical-align: middle;
+            margin: 0 8px 2px;
         }
     </style>
 </head>
 <body>
 
-<div class="login-box">
-    <div class="logo">
-        <h1>🛡 VISITOR TRACKING SYSTEM</h1>
-        <p>University of Nairobi — Authorized Access Only</p>
+<div class="login-shell">
+
+    <div class="login-box">
+        <div class="logo-block">
+            <div class="logo-mark-large">🛡</div>
+            <h1>Visitor Tracking System</h1>
+            <p>University of Nairobi · Authorized access only</p>
+        </div>
+
+        {% if error %}
+        <div class="flash error" style="margin: 0 0 18px;">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="/login" autocomplete="off">
+            <label>Username</label>
+            <input type="text" name="username" placeholder="Enter your username"
+                   required autofocus autocomplete="username">
+
+            <label>Password</label>
+            <input type="password" name="password" placeholder="Enter your password"
+                   required autocomplete="current-password">
+
+            <button type="submit" class="btn">🔓 Sign in</button>
+        </form>
     </div>
 
-    {% if error %}
-    <div class="error">⛔ {{ error }}</div>
-    {% endif %}
+    <div class="footer">
+        Angwenyi Melissa Moraa
+        <span class="divider"></span>
+        SCS3/149260/2024
+        <br>
+        University of Nairobi
+    </div>
 
-    <form method="POST" action="/login">
-        <label>Username</label>
-        <input type="text" name="username" placeholder="Enter username" required autofocus>
-
-        <label>Password</label>
-        <input type="password" name="password" placeholder="Enter password" required>
-
-        <button type="submit">🔓 LOGIN</button>
-    </form>
 </div>
-
-<footer>
-    Angwenyi Melissa Moraa — SCS3/149260/2024 · University of Nairobi
-</footer>
 
 </body>
 </html>

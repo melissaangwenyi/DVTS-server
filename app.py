@@ -1,37 +1,29 @@
 """
-server/app.py — Flask Server with full web interface
+server/app.py — Standalone Flask web app for the Visitor Tracking System
 
-FIXES IN THIS VERSION:
-  - Login now uses verify_guard_web() which checks password hash against the
-    guards table (proper auth instead of a single shared WEB_PASSWORD).
-  - Admin check uses session["role"] == "admin" (set at login) instead of
-    comparing username strings — this is why Manage Guards was invisible.
-  - /manage-guards and /manage-residents routes added (admin only).
-  - Overdue flag passed to reports page so rows highlight correctly.
-  - Password autofill bug fixed: national_id and phone inputs use
-    autocomplete="off" in the HTML (see dashboard.html).
-  - "Other" category substitution bug fixed (was re-reading category after
-    the data dict was already built).
-  - pax_ids from web check-in are now stored as individual passenger rows
-    via upsert_passenger() so they appear in the occupancy table.
+This is the standalone version. The desktop sync layer has been removed; the
+app now only serves the web interface (login, dashboard, reports, admin
+panels). The /api/health endpoint remains so Railway can health-check it.
 """
 
 import os
 import sys
 import uuid
-import hashlib
 from datetime import datetime, timezone, timedelta
 from functools import wraps
 
-# Nairobi is UTC+3 — all timestamps stored and displayed in EAT
+# Nairobi is UTC+3 — all timestamps are stored and displayed in EAT
 EAT = timezone(timedelta(hours=3))
 
-def now_eat():
-    """Returns the current Nairobi time as a naive datetime string."""
+
+def now_eat() -> str:
+    """Current Nairobi time as a 'YYYY-MM-DD HH:MM:SS' string."""
     return datetime.now(EAT).strftime("%Y-%m-%d %H:%M:%S")
 
-from flask import (Flask, render_template, request, redirect,
-                   url_for, session, flash, jsonify)
+
+from flask import (
+    Flask, render_template, request, redirect, url_for, session, flash
+)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -59,7 +51,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "vts-secret-key-change-in-production")
 app.register_blueprint(api_bp)
 
-# Initialise database tables on startup
+# Build database tables on first boot
 try:
     init_server_db()
     print("[Startup] Database tables ready.")
@@ -79,13 +71,13 @@ def login_required(f):
 
 
 def admin_required(f):
-    """Only allows users whose role is 'admin' to access the route."""
+    """Only allows users whose role is 'admin'."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if "guard_name" not in session:
             return redirect(url_for("login"))
         if session.get("role") != "admin":
-            flash("⛔ Admin access required.", "error")
+            flash("Admin access required.", "error")
             return redirect(url_for("dashboard"))
         return f(*args, **kwargs)
     return decorated
@@ -93,31 +85,37 @@ def admin_required(f):
 
 # ── HELPERS ────────────────────────────────────────────────────────────────
 
-def duration_str(check_in_str, check_out_str=None):
+def duration_str(check_in_str, check_out_str=None) -> str:
     try:
         fmt = "%Y-%m-%d %H:%M:%S"
         ci  = datetime.strptime(str(check_in_str)[:19], fmt)
-        end = datetime.strptime(str(check_out_str)[:19], fmt) if check_out_str else datetime.now(EAT).replace(tzinfo=None)
+        end = (datetime.strptime(str(check_out_str)[:19], fmt)
+               if check_out_str
+               else datetime.now(EAT).replace(tzinfo=None))
         mins = (end - ci).total_seconds() / 60
         if mins < 60:
             return f"{int(mins)}m"
-        return f"{int(mins//60)}h {int(mins%60)}m"
+        return f"{int(mins // 60)}h {int(mins % 60)}m"
     except Exception:
         return "—"
 
 
-def format_dt(dt_str):
+def format_dt(dt_str) -> str:
     try:
-        return datetime.strptime(str(dt_str)[:19], "%Y-%m-%d %H:%M:%S").strftime("%d %b  %H:%M")
+        return datetime.strptime(
+            str(dt_str)[:19], "%Y-%m-%d %H:%M:%S"
+        ).strftime("%d %b  %H:%M")
     except Exception:
         return str(dt_str) if dt_str else "—"
 
 
-def is_overdue(category, check_in_str, estimated_minutes=None):
+def is_overdue(category, check_in_str, estimated_minutes=None) -> bool:
     try:
         fmt = "%Y-%m-%d %H:%M:%S"
         ci  = datetime.strptime(str(check_in_str)[:19], fmt)
-        mins_passed = (datetime.now(EAT).replace(tzinfo=None) - ci).total_seconds() / 60
+        mins_passed = (
+            datetime.now(EAT).replace(tzinfo=None) - ci
+        ).total_seconds() / 60
         if category == "Delivery":
             return mins_passed > 20
         if estimated_minutes:
@@ -147,12 +145,13 @@ def login():
             session["guard_name"] = guard["full_name"]
             session["username"]   = guard["username"]
             session["guard_id"]   = guard["guard_id"]
-            # role is "admin" or "guard" — drives the navbar visibility
             session["role"]       = guard.get("role", "guard")
             return redirect(url_for("dashboard"))
-        else:
-            return render_template("login.html",
-                                   error="Invalid credentials. Access denied.")
+
+        return render_template(
+            "login.html",
+            error="Invalid credentials. Access denied.",
+        )
 
     return render_template("login.html", error=None)
 
@@ -187,16 +186,15 @@ def dashboard():
 @app.route("/checkin", methods=["POST"])
 @login_required
 def checkin():
-    full_name     = request.form.get("full_name",     "").strip()
-    national_id   = request.form.get("national_id",   "").strip()
-    phone_number  = request.form.get("phone_number",  "").strip()
-    vehicle_plate = request.form.get("vehicle_plate", "").strip()
-    no_id         = request.form.get("no_id") == "on"
-    host_pin      = request.form.get("host_pin",      "").strip()
-    multi_pax     = request.form.get("multi_pax") == "on"
+    full_name       = request.form.get("full_name",     "").strip()
+    national_id     = request.form.get("national_id",   "").strip()
+    phone_number    = request.form.get("phone_number",  "").strip()
+    vehicle_plate   = request.form.get("vehicle_plate", "").strip()
+    no_id           = request.form.get("no_id") == "on"
+    host_pin        = request.form.get("host_pin",      "").strip()
+    multi_pax       = request.form.get("multi_pax") == "on"
     pax_count_extra = int(request.form.get("pax_count", 1)) if multi_pax else 0
 
-    # Resolve category — handle "Other" substitution before using it
     raw_category = request.form.get("category", "").strip()
     if raw_category == "Other":
         custom = request.form.get("other_category", "").strip()
@@ -204,7 +202,6 @@ def checkin():
     else:
         category = raw_category
 
-    # Estimated minutes
     est_raw = request.form.get("estimated_minutes", "").strip()
     if category == "Delivery":
         estimated_minutes = 20
@@ -215,23 +212,23 @@ def checkin():
 
     # Validation
     if not full_name or not category:
-        flash("❌ Full name and category are required.", "error")
+        flash("Full name and category are required.", "error")
         return redirect(url_for("dashboard"))
 
     if not no_id and not national_id:
-        flash("❌ National ID is required (or tick 'Visitor has NO ID').", "error")
+        flash("National ID is required (or tick 'Visitor has NO ID').", "error")
         return redirect(url_for("dashboard"))
 
     if not no_id and national_id and not national_id.isdigit():
-        flash("❌ National ID must contain only numbers.", "error")
+        flash("National ID must contain only numbers.", "error")
         return redirect(url_for("dashboard"))
 
     if phone_number and not phone_number.isdigit():
-        flash("❌ Phone number must contain only numbers.", "error")
+        flash("Phone number must contain only numbers.", "error")
         return redirect(url_for("dashboard"))
 
     if no_id and not host_pin:
-        flash("❌ Host Secret PIN is required for Zero-Trust entry.", "error")
+        flash("Host secret PIN is required for zero-trust entry.", "error")
         return redirect(url_for("dashboard"))
 
     # Collect associated visitor IDs
@@ -242,10 +239,8 @@ def checkin():
             if pid:
                 passenger_ids.append(pid)
 
-    # Build UUIDs and timestamp in Nairobi time (EAT = UTC+3)
     visitor_uuid = str(uuid.uuid4())
     log_uuid     = str(uuid.uuid4())
-    now_str      = now_eat()
     total_pax    = 1 + pax_count_extra if multi_pax else 1
 
     data = {
@@ -257,7 +252,7 @@ def checkin():
         "vehicle_plate":     vehicle_plate or None,
         "category":          category,
         "exception_flag":    no_id,
-        "check_in_time":     now_str,
+        "check_in_time":     now_eat(),
         "check_out_time":    None,
         "pax_count":         total_pax,
         "estimated_minutes": estimated_minutes,
@@ -267,15 +262,14 @@ def checkin():
 
     success = upsert_visit(data)
 
-    # Save each passenger as its own row in associated_passengers
     if success and passenger_ids:
         for pid in passenger_ids:
             upsert_passenger(log_uuid, pid)
 
     if success:
-        flash(f"✅ {full_name} checked in successfully.", "success")
+        flash(f"{full_name} checked in successfully.", "success")
     else:
-        flash("❌ Check-in failed. Please try again.", "error")
+        flash("Check-in failed. Please try again.", "error")
 
     return redirect(url_for("dashboard"))
 
@@ -287,14 +281,14 @@ def checkin():
 def checkout():
     log_uuid = request.form.get("log_uuid", "").strip()
     if not log_uuid:
-        flash("❌ Invalid checkout request.", "error")
+        flash("Invalid checkout request.", "error")
         return redirect(url_for("dashboard"))
 
     success = web_checkout(log_uuid)
     if success:
-        flash("✅ Visitor checked out successfully.", "success")
+        flash("Visitor checked out successfully.", "success")
     else:
-        flash("❌ Checkout failed — visitor may already be checked out.", "error")
+        flash("Checkout failed — visitor may already be checked out.", "error")
 
     return redirect(url_for("dashboard"))
 
@@ -316,17 +310,18 @@ def reports():
         r["check_in_display"]  = format_dt(r["check_in_time"])
         r["check_out_display"] = format_dt(r["check_out_time"])
         r["duration"]          = duration_str(r["check_in_time"], r["check_out_time"])
-        # was_overdue comes from SQL; ensure it is a Python bool
         r["was_overdue"]       = bool(r.get("was_overdue", False))
         history.append(r)
 
-    return render_template("reports.html",
-                           history=history,
-                           stats=stats,
-                           request=request)
+    return render_template(
+        "reports.html",
+        history=history,
+        stats=stats,
+        request=request,
+    )
 
 
-# ── MANAGE GUARDS (admin only) ─────────────────────────────────────────────
+# ── MANAGE GUARDS (admin) ──────────────────────────────────────────────────
 
 @app.route("/manage-guards")
 @admin_required
@@ -344,17 +339,17 @@ def add_guard():
     role      = request.form.get("role",      "guard").strip()
 
     if not username or not password or not full_name:
-        flash("❌ All fields are required.", "error")
+        flash("All fields are required.", "error")
         return redirect(url_for("manage_guards"))
     if len(password) < 6:
-        flash("❌ Password must be at least 6 characters.", "error")
+        flash("Password must be at least 6 characters.", "error")
         return redirect(url_for("manage_guards"))
 
     success = add_guard_server(username, password, full_name, role)
     if success:
-        flash(f"✅ Guard '{username}' added successfully.", "success")
+        flash(f"Guard '{username}' added successfully.", "success")
     else:
-        flash(f"❌ Username '{username}' already exists.", "error")
+        flash(f"Username '{username}' already exists.", "error")
     return redirect(url_for("manage_guards"))
 
 
@@ -362,7 +357,7 @@ def add_guard():
 @admin_required
 def toggle_guard(guard_id):
     new_state = toggle_guard_server(guard_id)
-    flash(f"✅ Guard {'activated' if new_state else 'deactivated'}.", "success")
+    flash(f"Guard {'activated' if new_state else 'deactivated'}.", "success")
     return redirect(url_for("manage_guards"))
 
 
@@ -371,17 +366,17 @@ def toggle_guard(guard_id):
 def reset_guard_password(guard_id):
     new_pw = request.form.get("new_password", "").strip()
     if len(new_pw) < 6:
-        flash("❌ Password must be at least 6 characters.", "error")
+        flash("Password must be at least 6 characters.", "error")
         return redirect(url_for("manage_guards"))
     success = reset_guard_password_server(guard_id, new_pw)
     if success:
-        flash("✅ Password updated.", "success")
+        flash("Password updated.", "success")
     else:
-        flash("❌ Failed to update password.", "error")
+        flash("Failed to update password.", "error")
     return redirect(url_for("manage_guards"))
 
 
-# ── MANAGE RESIDENTS (admin only) ──────────────────────────────────────────
+# ── MANAGE RESIDENTS (admin) ───────────────────────────────────────────────
 
 @app.route("/manage-residents")
 @admin_required
@@ -399,14 +394,14 @@ def add_resident():
     phone       = request.form.get("phone",       "").strip()
 
     if not full_name or not unit_number or not host_pin:
-        flash("❌ Full name, unit, and PIN are required.", "error")
+        flash("Full name, unit, and PIN are required.", "error")
         return redirect(url_for("manage_residents"))
 
     success = add_resident_server(full_name, unit_number, host_pin, phone)
     if success:
-        flash(f"✅ Resident '{full_name}' added.", "success")
+        flash(f"Resident '{full_name}' added.", "success")
     else:
-        flash(f"❌ PIN '{host_pin}' already exists. Choose a different PIN.", "error")
+        flash(f"PIN '{host_pin}' already exists. Choose a different PIN.", "error")
     return redirect(url_for("manage_residents"))
 
 
@@ -414,7 +409,7 @@ def add_resident():
 @admin_required
 def toggle_resident(resident_id):
     new_state = toggle_resident_server(resident_id)
-    flash(f"✅ Resident {'activated' if new_state else 'deactivated'}.", "success")
+    flash(f"Resident {'activated' if new_state else 'deactivated'}.", "success")
     return redirect(url_for("manage_residents"))
 
 
@@ -426,14 +421,14 @@ def edit_resident(resident_id):
     phone       = request.form.get("phone",       "").strip()
 
     if not full_name or not unit_number:
-        flash("❌ Full name and unit are required.", "error")
+        flash("Full name and unit are required.", "error")
         return redirect(url_for("manage_residents"))
 
     success = update_resident_server(resident_id, full_name, unit_number, phone)
     if success:
-        flash("✅ Resident updated.", "success")
+        flash("Resident updated.", "success")
     else:
-        flash("❌ Update failed.", "error")
+        flash("Update failed.", "error")
     return redirect(url_for("manage_residents"))
 
 
