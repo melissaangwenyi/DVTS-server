@@ -93,7 +93,7 @@
                                 {% if is_self %}
                                 <button class="btn btn-sm btn-secondary disabled"
                                         disabled
-                                        title="You can't toggle your own account. Ask another admin.">
+                                        title="You can't toggle your own account.">
                                     🔒 Locked
                                 </button>
                                 {% else %}
@@ -104,6 +104,13 @@
                                     <button type="submit" class="btn btn-sm btn-secondary">Toggle</button>
                                 </form>
                                 {% endif %}
+                                <button type="button"
+                                        class="btn btn-sm btn-secondary reset-pw-btn"
+                                        style="margin-left:4px;"
+                                        data-id="{{ guard.guard_id }}"
+                                        data-username="{{ guard.username }}">
+                                    🔑 Reset PW
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -151,6 +158,75 @@
 
     </div>
 </div>
+<!-- PASSWORD RESET MODAL -->
+<div id="reset-modal" style="
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45);
+    z-index:1000; align-items:center; justify-content:center;">
+    <div style="
+        background:var(--surface); border:1px solid var(--border);
+        border-radius:var(--radius-lg); padding:28px 28px 24px;
+        width:100%; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.15);">
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">🔑 Reset password</h3>
+        <p id="reset-subtitle" style="font-size:12px;color:var(--text-muted);margin-bottom:18px;"></p>
+        <form id="reset-form" method="POST">
+            <label>New password *</label>
+            <input type="password" name="new_password" id="new_password"
+                   required minlength="6" placeholder="At least 6 characters"
+                   autocomplete="new-password">
+            <label style="margin-top:4px;">Confirm password *</label>
+            <input type="password" id="confirm_password"
+                   required minlength="6" placeholder="Repeat password"
+                   autocomplete="new-password">
+            <div id="pw-match-err" style="font-size:11px;color:var(--red-strong);display:none;margin-bottom:8px;">
+                Passwords do not match.
+            </div>
+            <div style="display:flex;gap:10px;margin-top:8px;">
+                <button type="submit" class="btn" style="flex:1;" onclick="return checkMatch()">
+                    Save password
+                </button>
+                <button type="button" class="btn btn-secondary" style="flex:1;"
+                        onclick="closeReset()">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Wire up Reset PW buttons via data attributes (avoids JS/Jinja quote conflicts)
+document.querySelectorAll('.reset-pw-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        openReset(this.dataset.id, this.dataset.username);
+    });
+});
+
+function openReset(guardId, username) {
+    document.getElementById('reset-form').action = '/manage-guards/reset-password/' + guardId;
+    document.getElementById('reset-subtitle').textContent = 'Guard: ' + username;
+    document.getElementById('new_password').value = '';
+    document.getElementById('confirm_password').value = '';
+    document.getElementById('pw-match-err').style.display = 'none';
+    var modal = document.getElementById('reset-modal');
+    modal.style.display = 'flex';
+    setTimeout(function(){ document.getElementById('new_password').focus(); }, 100);
+}
+function closeReset() {
+    document.getElementById('reset-modal').style.display = 'none';
+}
+function checkMatch() {
+    var pw  = document.getElementById('new_password').value;
+    var cpw = document.getElementById('confirm_password').value;
+    if (pw !== cpw) {
+        document.getElementById('pw-match-err').style.display = 'block';
+        return false;
+    }
+    return true;
+}
+document.getElementById('reset-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeReset();
+});
+</script>
 
 </body>
 </html>
