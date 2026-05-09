@@ -17,10 +17,10 @@
         }
     }
 
-    // Apply saved theme as early as possible (script is loaded in <head>)
+    // Default is dark. Only switch to light if user explicitly chose it.
     var saved = null;
     try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
-    applyTheme(saved === 'dark' ? 'dark' : 'light');
+    applyTheme(saved === 'light' ? 'light' : 'dark');
 
     // Wire up the toggle button(s) once the DOM is ready
     document.addEventListener('DOMContentLoaded', function () {
