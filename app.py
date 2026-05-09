@@ -774,35 +774,29 @@ def audit_log():
 @admin_required
 def test_email():
     import os
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASSWORD", "").replace(" ", "")
-    from_name = os.environ.get("SMTP_FROM_NAME", "VTS")
+    enabled    = os.environ.get("EMAIL_ENABLED", "").lower() == "true"
+    smtp_user  = os.environ.get("SMTP_USER", "")
+    smtp_pass  = os.environ.get("SMTP_PASSWORD", "").replace(" ", "")
+    from_name  = os.environ.get("SMTP_FROM_NAME", "VTS")
 
-    config_html = (
-        f"<b>SMTP_HOST:</b> smtp.gmail.com (now using HTTPS API instead)<br>"
-        f"<b>SMTP_USER:</b> {smtp_user or 'NOT SET'}<br>"
-        f"<b>SMTP_PASSWORD:</b> {'SET (' + str(len(smtp_pass)) + ' chars — should be 16)' if smtp_pass else 'NOT SET'}<br>"
-        f"<b>SMTP_FROM_NAME:</b> {from_name}"
+    status_box = (
+        "<div style='background:#FFF3CD;border:1px solid #FBBF24;border-radius:8px;"
+        "padding:14px;margin-bottom:16px;font-size:13px;'>"
+        "<b>⚠ Email notifications are currently DISABLED</b><br><br>"
+        "The feature is fully built and ready. It is disabled because Railway's free tier "
+        "blocks all outbound network connections required to send email.<br><br>"
+        "To enable when on a paid host or after migrating:<br>"
+        "1. Add env var <code>EMAIL_ENABLED=true</code><br>"
+        "2. Ensure <code>SMTP_USER</code> and <code>SMTP_PASSWORD</code> (16-char Gmail App Password) are set<br>"
+        "3. Add an email address to each host in Manage Hosts"
+        "</div>"
+    ) if not enabled else (
+        "<div style='background:#D1FAE5;border:1px solid #34D399;border-radius:8px;"
+        "padding:14px;margin-bottom:16px;font-size:13px;'>"
+        "<b>✅ Email notifications are ENABLED</b><br>"
+        f"Sending from: {smtp_user}"
+        "</div>"
     )
-
-    # Try sending via the new REST API approach
-    try:
-        from data.email_service import send_host_notification
-        ok = send_host_notification(
-            host_email=smtp_user,
-            host_name="Test Host",
-            visitor_name="Test Visitor",
-            visitor_category="Guest",
-            unit="Test Unit",
-            check_in_time=now_eat(),
-            reason="Email diagnostic test",
-        )
-        if ok:
-            result = f"<span style='color:green;font-weight:700;'>SUCCESS — check {smtp_user} inbox</span>"
-        else:
-            result = "<span style='color:red;font-weight:700;'>FAILED — check Railway logs for detail</span>"
-    except Exception as e:
-        result = f"<span style='color:red;font-weight:700;'>ERROR: {e}</span>"
 
     from data.server_db import get_connection
     host_rows = ""
@@ -810,31 +804,30 @@ def test_email():
         conn = get_connection(); cur = conn.cursor()
         cur.execute("SELECT full_name, unit_number, host_email FROM residents WHERE is_active=TRUE ORDER BY unit_number")
         for r in cur.fetchall():
-            color = "green" if r["host_email"] else "red"
-            val   = r["host_email"] or "NO EMAIL SET"
-            host_rows += f"<tr><td>{r['full_name']}</td><td>{r['unit_number']}</td><td style='color:{color}'>{val}</td></tr>"
+            color = "green" if r["host_email"] else "#999"
+            val   = r["host_email"] or "—"
+            host_rows += (f"<tr><td>{r['full_name']}</td><td>{r['unit_number']}</td>"
+                         f"<td style='color:{color}'>{val}</td></tr>")
         cur.close(); conn.close()
     except Exception as e:
         host_rows = f"<tr><td colspan=3>DB error: {e}</td></tr>"
 
     return (
         "<!DOCTYPE html><html><head><style>"
-        "body{font-family:sans-serif;padding:24px;max-width:700px;}"
+        "body{font-family:sans-serif;padding:28px;max-width:680px;}"
         "table{border-collapse:collapse;width:100%;margin-top:10px;}"
         "th,td{border:1px solid #ddd;padding:8px;font-size:13px;text-align:left;}"
-        "th{background:#f5f5f5;}.box{background:#f9f9f9;border:1px solid #ddd;"
-        "border-radius:6px;padding:14px;margin:12px 0;font-size:13px;line-height:1.9;}"
+        "th{background:#f5f5f5;}code{background:#f0f0f0;padding:2px 6px;border-radius:4px;}"
         ".btn{display:inline-block;padding:10px 18px;background:#008564;color:#fff;"
         "text-decoration:none;border-radius:6px;margin-top:16px;}"
         "</style></head><body>"
-        "<h2>Email Diagnostic</h2>"
-        "<div class='box'>" + config_html + "</div>"
-        "<p><b>Test result:</b> " + result + "</p>"
-        "<h3 style='margin-top:20px;'>Host emails in DB</h3>"
-        "<table><tr><th>Host</th><th>Unit</th><th>Email</th></tr>" + host_rows + "</table>"
-        "<p style='margin-top:14px;font-size:12px;color:#666;'>"
-        "Email fires only when: SMTP_USER + SMTP_PASSWORD set, visitor selects a unit, that unit has an email saved.</p>"
-        "<a href='/dashboard' class='btn'>Back to Dashboard</a>"
+        "<h2>📧 Email Notification Status</h2>"
+        + status_box +
+        "<h3>Host notification emails</h3>"
+        "<table><tr><th>Host</th><th>Unit</th><th>Email on file</th></tr>"
+        + host_rows +
+        "</table>"
+        "<a href='/dashboard' class='btn'>← Back</a>"
         "</body></html>"
     )
 
@@ -910,7 +903,7 @@ def db_status():
                 🌱 Full reset + seed demo data
             </button>
         </form>
-        <br><br><a href="/manage-hosts" class="btn">← Back to Hosts</a>
+        <form action=\"/admin/reset-visits\" method=\"POST\" style=\"display:inline;\"><button class=\"btn\" style=\"background:#A32D2D;\" onclick=\"return confirm('Clear ALL visit data?')\">🗑 Clear all visit data</button></form>        <br><br><a href=\"/manage-hosts\" class=\"btn\">← Back to Hosts</a>
         </body></html>"""
         return html
     except Exception as e:
