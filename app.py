@@ -950,19 +950,20 @@ def full_reset_and_seed():
 
         # ── SEED HOSTS ────────────────────────────────────────────────────
         hosts = [
-            ("Dr. James Mwangi",    "A-101", "residential", "1234", "0712000001", None),
-            ("Prof. Grace Otieno",  "A-102", "residential", "5678", "0712000002", None),
-            ("Mr. Peter Kamau",     "B-201", "residential", "2468", "0712000003", None),
-            ("Acme Technologies",   "Suite 301", "office",  "9999", "0700100001", None),
-            ("Nairobi Consultants", "Suite 402", "office",  "7777", "0700100002", None),
-            ("HR Department",       "Suite 101", "office",  "4321", "0700100003", None),
+            ("Dr. James Mwangi",    "A-101",     "residential", "1234", "0712000001", None),
+            ("Prof. Grace Otieno",  "A-102",     "residential", "5678", "0712000002", None),
+            ("Mr. Peter Kamau",     "B-201",     "residential", "2468", "0712000003", None),
+            ("Acme Technologies",   "Suite 301", "office",      "9999", "0700100001", None),
+            ("Nairobi Consultants", "Suite 402", "office",      "7777", "0700100002", None),
+            ("HR Department",       "Suite 101", "office",      "4321", "0700100003", None),
         ]
         host_units = []
         for (name, unit, htype, pin, phone, email) in hosts:
             cur.execute("""
-                INSERT INTO residents (full_name, unit_number, host_type, host_pin, phone, host_email, is_active)
-                VALUES (%s,%s,%s,%s,%s,%s,TRUE)
-            """, (name, unit, htype, pin, phone, email))
+                INSERT INTO residents
+                    (full_name, unit_number, host_pin, phone, host_type, host_email, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE)
+            """, (name, unit, pin, phone, htype, email))
             host_units.append(unit)
 
         # ── SEED COMPLETED VISITS ─────────────────────────────────────────
