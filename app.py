@@ -773,41 +773,36 @@ def audit_log():
 @app.route("/admin/test-email")
 @admin_required
 def test_email():
-    """Send a test email to diagnose SMTP issues."""
-    import os, smtplib, ssl
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    from email.utils import formataddr
-
-    smtp_host = os.environ.get("SMTP_HOST", "")
-    smtp_port = os.environ.get("SMTP_PORT", "587")
+    import os
     smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASSWORD", "")
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "").replace(" ", "")
     from_name = os.environ.get("SMTP_FROM_NAME", "VTS")
 
     config_html = (
-        f"<b>SMTP_HOST:</b> {smtp_host or 'NOT SET'}<br>"
-        f"<b>SMTP_PORT:</b> {smtp_port}<br>"
+        f"<b>SMTP_HOST:</b> smtp.gmail.com (now using HTTPS API instead)<br>"
         f"<b>SMTP_USER:</b> {smtp_user or 'NOT SET'}<br>"
-        f"<b>SMTP_PASSWORD:</b> {'SET (' + str(len(smtp_pass)) + ' chars)' if smtp_pass else 'NOT SET'}<br>"
+        f"<b>SMTP_PASSWORD:</b> {'SET (' + str(len(smtp_pass)) + ' chars — should be 16)' if smtp_pass else 'NOT SET'}<br>"
         f"<b>SMTP_FROM_NAME:</b> {from_name}"
     )
 
-    result = ""
+    # Try sending via the new REST API approach
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "VTS Email Test"
-        msg["From"]    = formataddr((from_name, smtp_user))
-        msg["To"]      = smtp_user
-        msg.attach(MIMEText("Test email from your Visitor Tracking System. If you receive this, email is working.", "plain"))
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP(smtp_host, int(smtp_port), timeout=15) as srv:
-            srv.ehlo(); srv.starttls(context=ctx); srv.ehlo()
-            srv.login(smtp_user, smtp_pass)
-            srv.send_message(msg)
-        result = "<span style='color:green;font-weight:700;'>SUCCESS — test email sent to " + smtp_user + "</span>"
+        from data.email_service import send_host_notification
+        ok = send_host_notification(
+            host_email=smtp_user,
+            host_name="Test Host",
+            visitor_name="Test Visitor",
+            visitor_category="Guest",
+            unit="Test Unit",
+            check_in_time=now_eat(),
+            reason="Email diagnostic test",
+        )
+        if ok:
+            result = f"<span style='color:green;font-weight:700;'>SUCCESS — check {smtp_user} inbox</span>"
+        else:
+            result = "<span style='color:red;font-weight:700;'>FAILED — check Railway logs for detail</span>"
     except Exception as e:
-        result = "<span style='color:red;font-weight:700;'>FAILED: " + str(e) + "</span>"
+        result = f"<span style='color:red;font-weight:700;'>ERROR: {e}</span>"
 
     from data.server_db import get_connection
     host_rows = ""
@@ -828,24 +823,21 @@ def test_email():
         "table{border-collapse:collapse;width:100%;margin-top:10px;}"
         "th,td{border:1px solid #ddd;padding:8px;font-size:13px;text-align:left;}"
         "th{background:#f5f5f5;}.box{background:#f9f9f9;border:1px solid #ddd;"
-        "border-radius:6px;padding:14px;margin:12px 0;font-size:13px;line-height:1.8;}"
+        "border-radius:6px;padding:14px;margin:12px 0;font-size:13px;line-height:1.9;}"
         ".btn{display:inline-block;padding:10px 18px;background:#008564;color:#fff;"
         "text-decoration:none;border-radius:6px;margin-top:16px;}"
         "</style></head><body>"
         "<h2>Email Diagnostic</h2>"
         "<div class='box'>" + config_html + "</div>"
-        "<p><b>Test send result:</b> " + result + "</p>"
+        "<p><b>Test result:</b> " + result + "</p>"
         "<h3 style='margin-top:20px;'>Host emails in DB</h3>"
         "<table><tr><th>Host</th><th>Unit</th><th>Email</th></tr>" + host_rows + "</table>"
         "<p style='margin-top:14px;font-size:12px;color:#666;'>"
-        "Email fires only when: (1) SMTP vars set, (2) visitor selects a unit at check-in, "
-        "(3) that unit has an email saved in the hosts table.</p>"
+        "Email fires only when: SMTP_USER + SMTP_PASSWORD set, visitor selects a unit, that unit has an email saved.</p>"
         "<a href='/dashboard' class='btn'>Back to Dashboard</a>"
         "</body></html>"
     )
 
-
-# ── DB DIAGNOSTIC & FIX (admin only, safe to run any time) ───────────────
 
 @app.route("/admin/db-status")
 @admin_required
