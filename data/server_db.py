@@ -642,6 +642,39 @@ def get_active_units() -> list:
         return []
 
 
+
+
+def clear_all_hosts() -> bool:
+    """Wipe all rows from residents table. Admin-only, used for reset."""
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM residents")
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[ServerDB] clear_all_hosts error: {e}")
+        return False
+
+
+def clear_all_visits() -> bool:
+    """Wipe visit_logs, visitors, associated_passengers. Admin-only reset."""
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM associated_passengers")
+        cur.execute("DELETE FROM visit_logs")
+        cur.execute("DELETE FROM visitors")
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[ServerDB] clear_all_visits error: {e}")
+        return False
+
 # ── AUTH ──────────────────────────────────────────────────────────────────
 
 def verify_guard_web(username: str, password: str):
@@ -797,10 +830,21 @@ def add_resident_server(full_name: str, unit_number: str,
         cur.close()
         conn.close()
         return True
-    except psycopg2.IntegrityError:
+    except psycopg2.IntegrityError as e:
+        print(f"[ServerDB] add_resident IntegrityError: {e}")
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
         return False
     except Exception as e:
         print(f"[ServerDB] add_resident error: {e}")
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
         return False
 
 

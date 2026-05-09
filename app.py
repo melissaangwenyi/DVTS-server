@@ -55,11 +55,13 @@ from data.server_db import (  # noqa: E402
     check_blacklist, add_blacklist, remove_blacklist, get_all_blacklist,
     find_visitor_by_national_id,
     get_host_by_unit,
+    clear_all_hosts,
+    clear_all_visits,
 )
 # Load email_service safely — if the import fails for any reason,
 # replace send_host_notification with a no-op so the app still boots.
 try:
-    from data.email_service import send_host_notification
+    from data.email_service import send_host_notification  # type: ignore
 except ImportError:
     def send_host_notification(*args, **kwargs):
         print("[Email] email_service not found — notifications disabled.")
@@ -298,9 +300,6 @@ def checkin():
     # Validation
     if not full_name or not category:
         flash("Full name and category are required.", "error")
-        return redirect(url_for("dashboard"))
-    if not host_unit:
-        flash("Host unit/office is required for every visit.", "error")
         return redirect(url_for("dashboard"))
     if not no_id and not national_id:
         flash("National ID is required (or tick 'Visitor has NO ID').", "error")
@@ -766,6 +765,35 @@ def audit_log():
         action_filter=action_filter or "",
         actor_filter=actor_filter or "",
     )
+
+
+
+# ── DB RESET (admin only) ─────────────────────────────────────────────────
+
+@app.route("/admin/reset-hosts", methods=["POST"])
+@admin_required
+def reset_hosts():
+    """Wipe all hosts so you can start fresh."""
+    ok = clear_all_hosts()
+    if ok:
+        flash("All hosts cleared. You can now add fresh ones.", "success")
+        _audit("RESET_HOSTS", details="Admin wiped all host records")
+    else:
+        flash("Clear failed — check logs.", "error")
+    return redirect(url_for("manage_hosts"))
+
+
+@app.route("/admin/reset-visits", methods=["POST"])
+@admin_required
+def reset_visits():
+    """Wipe all visit data (visitors, visit_logs, passengers)."""
+    ok = clear_all_visits()
+    if ok:
+        flash("All visit data cleared.", "success")
+        _audit("RESET_VISITS", details="Admin wiped all visit records")
+    else:
+        flash("Clear failed — check logs.", "error")
+    return redirect(url_for("dashboard"))
 
 
 # ── STARTUP ───────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VTS — Manage Hosts</title>
+    <title>VTS — Hosts</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,9 +21,8 @@
         </div>
     </div>
     <div class="topbar-right">
-        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-            <span class="icon-moon">🌙</span>
-            <span class="icon-sun">☀</span>
+        <button class="theme-toggle" aria-label="Toggle dark mode">
+            <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
@@ -48,12 +47,18 @@
 
         <div class="card">
             <div class="card-header">
-                <h2>🏡 Registered hosts</h2>
-                <span class="badge badge-status-active">{{ hosts|length }} shown</span>
+                <h2>🏡 Hosts</h2>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <span class="badge badge-status-active">{{ hosts|length }} shown</span>
+                    <form action="/admin/reset-hosts" method="POST"
+                          onsubmit="return confirm('Delete ALL hosts? Cannot be undone.');">
+                        <button type="submit" class="btn btn-sm btn-danger">🗑 Reset all hosts</button>
+                    </form>
+                </div>
             </div>
 
             <form method="GET" action="/manage-hosts" class="unit-filter-strip"
-                  style="margin: 0; border-radius: 0; border-top: none; border-left: none; border-right: none; border-bottom: 1px solid var(--border);">
+                  style="margin:0;border-radius:0;border-top:none;border-left:none;border-right:none;border-bottom:1px solid var(--border);">
                 <label>Unit:</label>
                 <select name="unit" onchange="this.form.submit()">
                     <option value="">All</option>
@@ -63,42 +68,38 @@
                 </select>
                 <label>Type:</label>
                 <select name="type" onchange="this.form.submit()">
-                    <option value="">All types</option>
-                    <option value="office"      {{ 'selected' if type_filter=='office' }}>Office</option>
-                    <option value="residential" {{ 'selected' if type_filter=='residential' }}>Residential</option>
+                    <option value="">All</option>
+                    <option value="office"      {{ 'selected' if type_filter=="office" }}>Office</option>
+                    <option value="residential" {{ 'selected' if type_filter=="residential" }}>Residential</option>
                 </select>
                 {% if unit_filter or type_filter %}
                 <a href="/manage-hosts" class="btn btn-sm btn-secondary">Clear</a>
                 {% endif %}
             </form>
 
-            <div class="table-wrap" style="border: none; border-radius: 0;">
+            <div class="table-wrap" style="border:none;border-radius:0;">
                 {% if hosts %}
                 <table>
                     <thead>
                         <tr>
-                            <th>Full name</th>
+                            <th>Name</th>
                             <th>Unit</th>
                             <th>Type</th>
-                            <th>Email</th>
                             <th>PIN</th>
                             <th>Phone</th>
                             <th>Status</th>
-                            <th>Action</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for host in hosts %}
                         <tr>
-                            <td style="font-weight: 500;">{{ host.full_name }}</td>
+                            <td style="font-weight:500;">{{ host.full_name }}</td>
                             <td><code>{{ host.unit_number }}</code></td>
                             <td>
                                 <span class="host-type-chip {{ host.host_type or 'residential' }}">
                                     {{ host.host_type or 'residential' }}
                                 </span>
-                            </td>
-                            <td style="font-size: 12px; color: var(--text-muted);">
-                                {{ host.host_email or '—' }}
                             </td>
                             <td><code>{{ host.host_pin }}</code></td>
                             <td>{{ host.phone or '—' }}</td>
@@ -110,10 +111,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <form action="/manage-hosts/toggle/{{ host.resident_id }}"
-                                      method="POST"
-                                      style="display:inline;"
-                                      onsubmit="return confirm('{% if host.is_active %}Deactivate{% else %}Activate{% endif %} {{ host.full_name }}?');">
+                                <form action="/manage-hosts/toggle/{{ host.resident_id }}" method="POST" style="display:inline;">
                                     <button type="submit" class="btn btn-sm btn-secondary">Toggle</button>
                                 </form>
                             </td>
@@ -124,7 +122,7 @@
                 {% else %}
                 <div class="no-data">
                     <span class="icon">🏡</span>
-                    No hosts match the selected filters.
+                    No hosts yet — add one using the form.
                 </div>
                 {% endif %}
             </div>
@@ -135,38 +133,40 @@
             <div class="card-body">
                 <form method="POST" action="/manage-hosts/add" autocomplete="off">
                     <label>Full name *</label>
-                    <input type="text" name="full_name" required autocomplete="off"
-                           placeholder="Resident or company name">
+                    <input type="text" name="full_name" required placeholder="Name or company">
 
-                    <label>Unit / office number *</label>
-                    <input type="text" name="unit_number" required autocomplete="off"
-                           placeholder="e.g. A-12, Suite 301">
+                    <label>Unit / office *</label>
+                    <input type="text" name="unit_number" required placeholder="e.g. A-12, Suite 301">
 
-                    <label>Host type *</label>
+                    <label>Type *</label>
                     <select name="host_type" required>
                         <option value="residential">🏘 Residential</option>
-                        <option value="office">🏢 Office (commercial)</option>
+                        <option value="office">🏢 Office</option>
                     </select>
 
-                    <label>Email (for visit notifications)</label>
-                    <input type="email" name="host_email" autocomplete="off"
-                           placeholder="optional — e.g. user@company.com">
-                    <div class="field-help">If set AND email is configured, host gets notified when their visitor arrives.</div>
+                    <label>Notification email</label>
+                    <input type="email" name="host_email" placeholder="optional">
 
-                    <label>Host PIN (zero-trust check-in) *</label>
-                    <input type="text" name="host_pin" required autocomplete="off"
-                           placeholder="Unique secret PIN">
+                    <label>Host PIN *</label>
+                    <input type="text" name="host_pin" required placeholder="Unique PIN for zero-trust entry">
 
-                    <label>Phone number</label>
-                    <input type="text" name="phone" autocomplete="off"
-                           placeholder="e.g. 0712345678">
+                    <label>Phone</label>
+                    <input type="text" name="phone" placeholder="optional">
 
                     <button type="submit" class="btn">➕ Add host</button>
                 </form>
 
-                <div class="info-note" style="margin-top: 18px;">
-                    <span>💡</span>
-                    <span>Hosts can be residential units (e.g. Apt 3B) or commercial offices (e.g. Suite 401). Tag accordingly so you can filter and analyse separately.</span>
+                <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border);">
+                    <p style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;">⚠ Danger zone</p>
+                    <form action="/admin/reset-visits" method="POST"
+                          onsubmit="return confirm('Delete ALL visit records? Cannot be undone.');">
+                        <button type="submit" class="btn btn-danger" style="font-size:12px;">
+                            🗑 Clear all visit data
+                        </button>
+                    </form>
+                    <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">
+                        Clears check-ins, check-outs and visitor records. Use to reset test data.
+                    </p>
                 </div>
             </div>
         </div>

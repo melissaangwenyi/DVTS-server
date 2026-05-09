@@ -21,9 +21,8 @@
         </div>
     </div>
     <div class="topbar-right">
-        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-            <span class="icon-moon">🌙</span>
-            <span class="icon-sun">☀</span>
+        <button class="theme-toggle" aria-label="Toggle dark mode">
+            <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
@@ -49,158 +48,140 @@
 
 <div class="dashboard-main">
 
-    <!-- LEFT: CHECK-IN FORM -->
+    <!-- ── LEFT: CHECK-IN FORM ── -->
     <div class="left-panel">
-        <div class="panel-header">➕ Add visitor</div>
+        <div class="panel-header">➕ Check in visitor</div>
         <div class="form-body">
             <form method="POST" action="/checkin" id="checkinForm" autocomplete="off">
 
-                <div class="section-title">A — Primary details</div>
-
-                <label>National ID *</label>
-                <input type="text" name="national_id" id="national_id"
-                       placeholder="Enter ID — autofills if returning"
-                       autocomplete="off"
-                       oninput="enforceDigits(this, 'nid_error'); maybeLookupVisitor(this.value);">
-                <div class="field-error" id="nid_error">National ID must contain numbers only.</div>
-
-                <!-- Autofill banner -->
+                <!-- BLACKLIST / AUTOFILL ALERTS -->
                 <div class="autofill-banner" id="autofill_banner">
                     <span>✨</span>
-                    <span><strong>Returning visitor recognised</strong> — details autofilled. Edit any field if needed.</span>
+                    <span>Returning visitor — details filled in automatically.</span>
                 </div>
-
-                <!-- Blacklist alert -->
                 <div class="blacklist-alert" id="blacklist_alert">
-                    <div class="title">⛔ THIS VISITOR IS BLACKLISTED</div>
-                    <div class="reason" id="blacklist_reason">—</div>
+                    <div class="title">⛔ Visitor is blacklisted</div>
+                    <div class="reason" id="blacklist_reason"></div>
                     {% if session.get('role') == 'admin' %}
                     <label class="override-row">
                         <input type="checkbox" name="blacklist_override" id="blacklist_override">
-                        Override block (admin only) — proceed anyway. This action will be audited.
+                        Override (admin only — this action will be audited)
                     </label>
                     {% else %}
-                    <div class="override-row" style="border: none; padding: 0;">
-                        Only admins can override this block.
-                    </div>
+                    <div class="override-row" style="border:none;padding:0;">Only admins can override.</div>
                     {% endif %}
                 </div>
 
-                <label>Full name *</label>
-                <input type="text" name="full_name" id="full_name"
-                       placeholder="Letters and spaces only"
-                       autocomplete="off"
-                       required oninput="enforceLetters(this, 'name_error')">
-                <div class="field-error" id="name_error">Full name must contain letters only.</div>
+                <!-- SECTION A -->
+                <div class="section-title">Visitor details</div>
 
-                <label>Phone number</label>
+                <label>National ID</label>
+                <input type="text" name="national_id" id="national_id"
+                       placeholder="Numbers only"
+                       oninput="enforceDigits(this,'nid_error'); maybeLookup(this.value);">
+                <div class="field-error" id="nid_error">Numbers only.</div>
+
+                <label>Full name *</label>
+                <input type="text" name="full_name" id="full_name" required
+                       placeholder="As on ID"
+                       oninput="enforceLetters(this,'name_error');">
+                <div class="field-error" id="name_error">Letters only.</div>
+
+                <label>Phone</label>
                 <input type="text" name="phone_number" id="phone_number"
-                       placeholder="e.g. 0712345678"
-                       autocomplete="off"
-                       oninput="enforceDigits(this, 'phone_error')">
-                <div class="field-error" id="phone_error">Phone number must contain numbers only.</div>
+                       placeholder="Numbers only"
+                       oninput="enforceDigits(this,'phone_error');">
+                <div class="field-error" id="phone_error">Numbers only.</div>
 
                 <label>Vehicle plate</label>
-                <input type="text" name="vehicle_plate" id="vehicle_plate"
-                       placeholder="e.g. KCA 001A"
-                       autocomplete="off">
+                <input type="text" name="vehicle_plate" id="vehicle_plate">
 
-                <label>Visiting which unit / office *</label>
-                <select name="host_unit" id="host_unit" required>
-                    <option value="">— Select unit / office —</option>
+                <label>Visiting unit / office</label>
+                {% if hosts %}
+                <select name="host_unit" id="host_unit">
+                    <option value="">— Select (optional) —</option>
                     {% for h in hosts %}
                     <option value="{{ h.unit_number }}">
                         {{ h.unit_number }} — {{ h.full_name }}
-                        {% if h.host_type == 'office' %}(office){% endif %}
                     </option>
                     {% endfor %}
                 </select>
+                {% else %}
+                <div class="info-note" style="margin-bottom:14px;">
+                    <span>ℹ</span>
+                    <span>No hosts added yet.
+                        {% if session.get('role') == 'admin' %}
+                        <a href="/manage-hosts" style="color:var(--teal);">Add hosts →</a>
+                        {% endif %}
+                    </span>
+                </div>
+                <input type="hidden" name="host_unit" value="">
+                {% endif %}
 
                 <label>Reason for visit</label>
-                <input type="text" name="reason"
-                       placeholder="e.g. Job interview, package delivery"
-                       autocomplete="off"
-                       maxlength="120">
-                <div class="field-help">Optional — short note about why they're visiting.</div>
+                <input type="text" name="reason" placeholder="e.g. Interview, package delivery" maxlength="120">
 
                 <label>Category *</label>
-                <select name="category" id="category_select" required
-                        onchange="toggleCategoryOptions(this)">
-                    <option value="">— Select category —</option>
+                <select name="category" id="category_select" required onchange="toggleCategory(this)">
+                    <option value="">— Select —</option>
                     <option value="Guest">Guest</option>
-                    <option value="Delivery">Delivery (auto 20 min)</option>
+                    <option value="Delivery">Delivery</option>
                     <option value="Maintenance">Maintenance</option>
-                    <option value="Other">Other...</option>
+                    <option value="Other">Other</option>
                 </select>
 
                 <div id="delivery_note" class="info-note hidden">
-                    <span>ℹ</span><span>Delivery is automatically capped at 20 minutes.</span>
+                    <span>ℹ</span><span>Delivery visits are capped at 20 minutes.</span>
                 </div>
-
                 <div id="other_section" class="hidden">
-                    <label class="warning-label">Specify category *</label>
-                    <input type="text" name="other_category" id="other_category"
-                           placeholder="e.g. Contractor, Event"
-                           autocomplete="off">
+                    <label>Specify *</label>
+                    <input type="text" name="other_category" id="other_category">
                 </div>
-
                 <div id="duration_section" class="hidden">
-                    <label class="warning-label">Estimated stay (minutes) *</label>
-                    <input type="number" name="estimated_minutes" id="estimated_minutes"
-                           placeholder="e.g. 120" min="1"
-                           autocomplete="off"
-                           oninput="enforcePositiveInt(this, 'est_error')">
-                    <div class="field-error" id="est_error">Please enter a valid number of minutes.</div>
+                    <label>Estimated stay (minutes) *</label>
+                    <input type="number" name="estimated_minutes" id="estimated_minutes" min="1">
                 </div>
 
-                <div class="section-title">B — Zero-trust exception</div>
-
+                <!-- SECTION B -->
+                <div class="section-title">No ID / Zero-trust</div>
                 <label class="checkbox-row">
-                    <input type="checkbox" id="no_id_check" name="no_id"
-                           onchange="toggleNoId(this)">
+                    <input type="checkbox" name="no_id" id="no_id_check" onchange="toggleNoId(this)">
                     Visitor has no ID
                 </label>
-
                 <div id="pin_section" class="hidden">
-                    <label class="warning-label">Host secret PIN *</label>
-                    <input type="password" name="host_pin"
-                           placeholder="Enter host PIN"
-                           autocomplete="off">
+                    <label>Host PIN *</label>
+                    <input type="password" name="host_pin">
                 </div>
 
-                <div class="section-title">C — Group check-in</div>
-
+                <!-- SECTION C -->
+                <div class="section-title">Group check-in</div>
                 <label class="checkbox-row">
-                    <input type="checkbox" id="multi_pax" name="multi_pax"
-                           onchange="togglePaxFormSection(this)">
+                    <input type="checkbox" name="multi_pax" id="multi_pax" onchange="togglePaxSection(this)">
                     Multiple visitors
                 </label>
-
                 <div id="pax_section" class="hidden">
-                    <label>Number of extra visitors</label>
-                    <select id="pax_count" name="pax_count"
-                            onchange="buildPaxFields(this.value)">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
+                    <label>Extra visitors</label>
+                    <select id="pax_count" name="pax_count" onchange="buildPaxFields(this.value)">
+                        <option value="1">1</option><option value="2">2</option>
+                        <option value="3">3</option><option value="4">4</option>
                         <option value="5">5</option>
                     </select>
                     <div id="pax_fields"></div>
                 </div>
 
-                <button type="submit" class="btn">🔒 Secure check-in</button>
+                <button type="submit" class="btn" style="margin-top:8px;">🔒 Check in</button>
             </form>
         </div>
     </div>
 
-    <!-- RIGHT: ACTIVE OCCUPANCY -->
+    <!-- ── RIGHT: ACTIVE OCCUPANCY ── -->
     <div class="right-panel">
         <div class="panel-header">
-            <span>📋 Active occupancy</span>
-            <span class="count">{{ visits|length }} on premises</span>
+            <span>📋 On premises</span>
+            <span class="count">{{ visits|length }} active</span>
         </div>
 
+        {% if units %}
         <form method="GET" action="/dashboard" class="unit-filter-strip">
             <label>Filter by unit:</label>
             <select name="unit" onchange="this.form.submit()">
@@ -213,14 +194,9 @@
             <a href="/dashboard" class="btn btn-sm btn-secondary">Clear</a>
             {% endif %}
         </form>
+        {% endif %}
 
-        <div class="legend" style="margin: 14px 20px 0; border: 1px dashed var(--border); background: var(--surface-alt);">
-            <span class="legend-item"><span class="legend-dot red"></span>Overdue</span>
-            <span class="legend-item">⚠ Zero-trust / no-ID entry</span>
-            <span class="legend-item" style="color: var(--text-muted);">Click pax count to reveal IDs</span>
-        </div>
-
-        <div class="table-wrap" style="margin: 14px 20px 0; border: 1px solid var(--border); border-radius: var(--radius-md);">
+        <div class="table-wrap" style="margin:14px 20px 0;border:1px solid var(--border);border-radius:var(--radius-md);">
         {% if visits %}
         <table>
             <thead>
@@ -230,66 +206,52 @@
                     <th>Unit</th>
                     <th>Reason</th>
                     <th>Pax</th>
-                    <th>Plate</th>
                     <th>Entry</th>
                     <th>Duration</th>
-                    <th>Checked in by</th>
-                    <th>Note</th>
-                    <th>Action</th>
+                    <th>By</th>
+                    <th></th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 {% for v in visits %}
                 <tr class="{{ 'overdue' if v.overdue else '' }}">
-                    <td style="font-weight: 500;">{{ v.full_name }}</td>
+                    <td style="font-weight:500;">
+                        {{ v.full_name }}
+                        {% if v.exception_flag %}<span style="color:var(--amber-strong);" title="No-ID entry">⚠</span>{% endif %}
+                        {% if v.overdue %}<span title="Overdue">🔴</span>{% endif %}
+                    </td>
                     <td>
-                        {% set cat_lower = v.category|lower %}
-                        {% if cat_lower in ['guest','delivery','maintenance'] %}
-                        <span class="badge badge-{{ cat_lower }}">{{ v.category }}</span>
-                        {% else %}
-                        <span class="badge badge-other">{{ v.category }}</span>
-                        {% endif %}
+                        {% set cl = v.category|lower %}
+                        <span class="badge badge-{{ cl if cl in ['guest','delivery','maintenance'] else 'other' }}">{{ v.category }}</span>
                     </td>
                     <td><code>{{ v.host_unit or '—' }}</code></td>
-                    <td style="font-size: 12px; color: var(--text-muted); max-width: 140px;">
-                        {{ v.reason_for_visit or '—' }}
-                    </td>
+                    <td style="font-size:12px;color:var(--text-muted);max-width:120px;">{{ v.reason_for_visit or '—' }}</td>
                     <td>
                         {% if v.pax_count > 1 and v.pax_ids and v.pax_ids != '—' %}
-                        <span class="pax-badge"
-                              onclick="togglePaxIds('active-{{ loop.index }}', this)"
-                              title="Click to view IDs">
+                        <span class="pax-badge" onclick="togglePaxIds('a{{ loop.index }}',this)" title="Click to view IDs">
                             👥 {{ v.pax_count }} <span class="chevron">▾</span>
                         </span>
                         {% else %}
                         <span class="pax-badge no-pax">{{ v.pax_count }}</span>
                         {% endif %}
                     </td>
-                    <td>{{ v.vehicle_plate or '—' }}</td>
-                    <td style="white-space: nowrap;">{{ v.entry_display }}</td>
-                    <td style="white-space: nowrap;">{{ v.duration }}</td>
-                    <td style="font-size: 12px; color: var(--text-muted);">{{ v.checkin_guard_name or '—' }}</td>
-                    <td>
-                        {% if v.overdue %}<span style="font-weight: 600;">🔴 Overdue</span>
-                        {% elif v.exception_flag %}<span style="color: var(--amber-strong);">⚠ No-ID</span>
-                        {% else %}—
-                        {% endif %}
-                    </td>
+                    <td style="white-space:nowrap;">{{ v.entry_display }}</td>
+                    <td style="white-space:nowrap;">{{ v.duration }}</td>
+                    <td style="font-size:11px;color:var(--text-muted);">{{ v.checkin_guard_name or '—' }}</td>
                     <td>
                         <form method="POST" action="/checkout"
                               onsubmit="return confirm('Check out {{ v.full_name }}?')">
                             <input type="hidden" name="log_uuid" value="{{ v.local_uuid }}">
-                            <button type="submit" class="btn btn-sm">✓ Check out</button>
+                            <button type="submit" class="btn btn-sm">✓ Out</button>
                         </form>
                     </td>
                 </tr>
                 {% if v.pax_count > 1 and v.pax_ids and v.pax_ids != '—' %}
-                <tr id="pax-active-{{ loop.index }}" class="pax-detail-row hidden">
-                    <td colspan="11">
-                        <strong style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
-                            Associated visitor IDs ({{ v.pax_count - 1 }}):
-                        </strong>
-                        <div class="pax-ids-list" style="margin-top: 6px;">
+                <tr id="pax-a{{ loop.index }}" class="pax-detail-row hidden">
+                    <td colspan="10">
+                        <strong style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Associated IDs:</strong>
+                        <div class="pax-ids-list" style="margin-top:4px;">
                             {% for pid in v.pax_ids.split(' | ') %}
                             <span class="pax-id-chip">{{ pid }}</span>
                             {% endfor %}
@@ -303,206 +265,126 @@
         {% else %}
         <div class="no-data">
             <span class="icon">👋</span>
-            {% if unit_filter %}
-                No visitors currently in <strong>{{ unit_filter }}</strong>.
-            {% else %}
-                No visitors currently on premises.
-            {% endif %}
+            {% if unit_filter %}No visitors in <strong>{{ unit_filter }}</strong>.
+            {% else %}No visitors currently on premises.{% endif %}
         </div>
         {% endif %}
         </div>
 
-        <div class="action-bar" style="margin-top: 16px;">
-            <a href="{{ url_for('dashboard', unit=unit_filter) if unit_filter else url_for('dashboard') }}"
-               class="refresh-btn">🔄 Refresh</a>
-            <span class="status-text">Auto-refreshes on page load</span>
+        <div class="action-bar" style="margin-top:16px;">
+            <a href="{{ url_for('dashboard', unit=unit_filter) if unit_filter else url_for('dashboard') }}" class="refresh-btn">🔄 Refresh</a>
         </div>
     </div>
 
 </div>
 
 <script>
-    /* ── AUTOFILL (debounced lookup as the user types the NID) ── */
-    var lookupTimer = null;
-    function maybeLookupVisitor(value) {
-        var nid = (value || '').replace(/\D/g, '');
-        var banner   = document.getElementById('autofill_banner');
-        var bl       = document.getElementById('blacklist_alert');
-        var reasonEl = document.getElementById('blacklist_reason');
+var _lookupTimer = null;
+function maybeLookup(val) {
+    var nid = (val||'').replace(/\D/g,'');
+    document.getElementById('autofill_banner').classList.remove('visible');
+    document.getElementById('blacklist_alert').classList.remove('visible');
+    if (_lookupTimer) clearTimeout(_lookupTimer);
+    if (nid.length < 5) return;
+    _lookupTimer = setTimeout(function() {
+        fetch('/api/lookup-visitor?nid='+encodeURIComponent(nid))
+            .then(function(r){return r.json();})
+            .then(function(d){
+                if (d.found) {
+                    var nf=document.getElementById('full_name'),
+                        pf=document.getElementById('phone_number'),
+                        vf=document.getElementById('vehicle_plate');
+                    if(!nf.value) nf.value=d.full_name||'';
+                    if(!pf.value) pf.value=d.phone_number||'';
+                    if(!vf.value) vf.value=d.vehicle_plate||'';
+                    document.getElementById('autofill_banner').classList.add('visible');
+                }
+                if (d.blacklisted) {
+                    document.getElementById('blacklist_reason').textContent='Reason: '+(d.blacklist_reason||'No reason recorded');
+                    document.getElementById('blacklist_alert').classList.add('visible');
+                }
+            }).catch(function(){});
+    }, 400);
+}
 
-        // Clear any prior alerts immediately when user is editing
-        banner.classList.remove('visible');
-        bl.classList.remove('visible');
+function togglePaxIds(id, el) {
+    var row = document.getElementById('pax-'+id);
+    if(row) row.classList.toggle('hidden');
+    el.classList.toggle('expanded');
+}
 
-        if (lookupTimer) { clearTimeout(lookupTimer); }
-        if (nid.length < 5) return;
-
-        lookupTimer = setTimeout(function() {
-            fetch('/api/lookup-visitor?nid=' + encodeURIComponent(nid))
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.found) {
-                        // Only autofill if the field is empty (don't overwrite typing)
-                        var nameField  = document.getElementById('full_name');
-                        var phoneField = document.getElementById('phone_number');
-                        var plateField = document.getElementById('vehicle_plate');
-                        if (!nameField.value)  nameField.value  = data.full_name  || '';
-                        if (!phoneField.value) phoneField.value = data.phone_number || '';
-                        if (!plateField.value) plateField.value = data.vehicle_plate || '';
-                        banner.classList.add('visible');
-                        setTimeout(function() {
-                            banner.classList.add('fade-out');
-                        }, 4000);
-                    }
-                    if (data.blacklisted) {
-                        reasonEl.textContent = 'Reason: ' + (data.blacklist_reason || 'No reason recorded');
-                        bl.classList.add('visible');
-                    }
-                })
-                .catch(function(err) { console.warn('Lookup failed:', err); });
-        }, 400);  // 400ms debounce
+function enforceDigits(input, errId) {
+    var c=input.value.replace(/\D/g,'');
+    if(input.value!==c){
+        input.value=c; input.classList.add('error-field');
+        var e=document.getElementById(errId); if(e) e.classList.add('visible');
+        setTimeout(function(){input.classList.remove('error-field'); if(e) e.classList.remove('visible');},2500);
     }
+}
 
-    /* ── PAX-IDS REVEAL ── */
-    function togglePaxIds(rowId, badgeEl) {
-        var row = document.getElementById('pax-' + rowId);
-        if (!row) return;
-        row.classList.toggle('hidden');
-        badgeEl.classList.toggle('expanded');
+function enforceLetters(input, errId) {
+    var c=input.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g,'');
+    if(input.value!==c){
+        input.value=c; input.classList.add('error-field');
+        var e=document.getElementById(errId); if(e) e.classList.add('visible');
+        setTimeout(function(){input.classList.remove('error-field'); if(e) e.classList.remove('visible');},2500);
     }
+}
 
-    /* ── INPUT VALIDATION ── */
-    function enforceDigits(input, errorId) {
-        var val = input.value, cleaned = val.replace(/\D/g, '');
-        var errEl = document.getElementById(errorId);
-        if (val !== cleaned) {
-            input.value = cleaned;
-            input.classList.add('error-field');
-            errEl.classList.add('visible');
-            setTimeout(function() {
-                errEl.classList.remove('visible');
-                input.classList.remove('error-field');
-            }, 3000);
-        }
+function toggleCategory(sel) {
+    var dur=document.getElementById('duration_section'),
+        oth=document.getElementById('other_section'),
+        del=document.getElementById('delivery_note'),
+        di=document.getElementById('estimated_minutes'),
+        oi=document.getElementById('other_category');
+    [dur,oth,del].forEach(function(e){e.classList.add('hidden');});
+    if(di){di.required=false; di.value='';}
+    if(oi){oi.required=false; oi.value='';}
+    if(sel.value==='Maintenance'){dur.classList.remove('hidden'); if(di) di.required=true;}
+    else if(sel.value==='Delivery'){del.classList.remove('hidden');}
+    else if(sel.value==='Other'){
+        oth.classList.remove('hidden'); dur.classList.remove('hidden');
+        if(oi) oi.required=true; if(di) di.required=true;
     }
+}
 
-    function enforceLetters(input, errorId) {
-        var val = input.value, cleaned = val.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
-        var errEl = document.getElementById(errorId);
-        if (val !== cleaned) {
-            input.value = cleaned;
-            input.classList.add('error-field');
-            errEl.classList.add('visible');
-            setTimeout(function() {
-                errEl.classList.remove('visible');
-                input.classList.remove('error-field');
-            }, 3000);
-        }
+function toggleNoId(cb) {
+    var pin=document.getElementById('pin_section'),
+        nid=document.getElementById('national_id');
+    if(cb.checked){
+        pin.classList.remove('hidden');
+        nid.disabled=true; nid.required=false; nid.value='';
+        document.getElementById('autofill_banner').classList.remove('visible');
+        document.getElementById('blacklist_alert').classList.remove('visible');
+    } else {
+        pin.classList.add('hidden');
+        nid.disabled=false;
     }
+}
 
-    function enforcePositiveInt(input, errorId) {
-        var val = input.value;
-        var errEl = document.getElementById(errorId);
-        if (val && (isNaN(val) || parseInt(val) < 1)) {
-            input.classList.add('error-field');
-            errEl.classList.add('visible');
-        } else {
-            input.classList.remove('error-field');
-            errEl.classList.remove('visible');
-        }
+function togglePaxSection(cb) {
+    var s=document.getElementById('pax_section');
+    if(cb.checked){s.classList.remove('hidden'); buildPaxFields(1);}
+    else{s.classList.add('hidden'); document.getElementById('pax_fields').innerHTML='';}
+}
+
+function buildPaxFields(count) {
+    var c=document.getElementById('pax_fields'); c.innerHTML='';
+    for(var i=1;i<=count;i++){
+        var d=document.createElement('div');
+        var l=document.createElement('label'); l.textContent='Visitor '+i+' — National ID *'; l.style.marginTop='6px';
+        var inp=document.createElement('input');
+        inp.type='text'; inp.name='associated_id_'+i; inp.required=true;
+        inp.placeholder='Numbers only';
+        (function(el){
+            el.addEventListener('input',function(){
+                var clean=el.value.replace(/\D/g,'');
+                if(el.value!==clean){el.value=clean; el.classList.add('error-field'); setTimeout(function(){el.classList.remove('error-field');},2000);}
+            });
+        })(inp);
+        d.appendChild(l); d.appendChild(inp); c.appendChild(d);
     }
-
-    /* ── CATEGORY ── */
-    function toggleCategoryOptions(selectElem) {
-        var durationSec   = document.getElementById('duration_section');
-        var durationInput = document.getElementById('estimated_minutes');
-        var otherSec      = document.getElementById('other_section');
-        var otherInput    = document.getElementById('other_category');
-        var delivNote     = document.getElementById('delivery_note');
-
-        durationSec.classList.add('hidden');
-        otherSec.classList.add('hidden');
-        delivNote.classList.add('hidden');
-        if (durationInput) { durationInput.required = false; durationInput.value = ''; }
-        if (otherInput)    { otherInput.required = false;    otherInput.value = '';    }
-
-        if (selectElem.value === 'Maintenance') {
-            durationSec.classList.remove('hidden');
-            durationInput.required = true;
-        } else if (selectElem.value === 'Delivery') {
-            delivNote.classList.remove('hidden');
-        } else if (selectElem.value === 'Other') {
-            otherSec.classList.remove('hidden');
-            otherInput.required = true;
-            durationSec.classList.remove('hidden');
-            durationInput.required = true;
-        }
-    }
-
-    /* ── ZERO TRUST ── */
-    function toggleNoId(cb) {
-        var pinSection = document.getElementById('pin_section');
-        var nidField   = document.getElementById('national_id');
-        if (cb.checked) {
-            pinSection.classList.remove('hidden');
-            nidField.required = false;
-            nidField.disabled = true;
-            nidField.value    = '';
-            // Hide any active alerts — no NID means no autofill or blacklist match
-            document.getElementById('autofill_banner').classList.remove('visible');
-            document.getElementById('blacklist_alert').classList.remove('visible');
-        } else {
-            pinSection.classList.add('hidden');
-            nidField.disabled = false;
-        }
-    }
-
-    /* ── FORM-SIDE PAX SECTION ── */
-    function togglePaxFormSection(cb) {
-        var paxSection = document.getElementById('pax_section');
-        if (cb.checked) {
-            paxSection.classList.remove('hidden');
-            buildPaxFields(1);
-        } else {
-            paxSection.classList.add('hidden');
-            document.getElementById('pax_fields').innerHTML = '';
-        }
-    }
-
-    function buildPaxFields(count) {
-        var container = document.getElementById('pax_fields');
-        container.innerHTML = '';
-        for (var i = 1; i <= count; i++) {
-            var wrapper = document.createElement('div');
-            var lbl = document.createElement('label');
-            lbl.textContent = 'Associated visitor ' + i + ' — National ID *';
-            lbl.style.marginTop = '6px';
-
-            var inp = document.createElement('input');
-            inp.type         = 'text';
-            inp.name         = 'associated_id_' + i;
-            inp.placeholder  = 'National ID (numbers only)';
-            inp.required     = true;
-            inp.autocomplete = 'off';
-
-            (function(input) {
-                input.addEventListener('input', function() {
-                    var cleaned = input.value.replace(/\D/g, '');
-                    if (input.value !== cleaned) {
-                        input.value = cleaned;
-                        input.classList.add('error-field');
-                        setTimeout(function() {
-                            input.classList.remove('error-field');
-                        }, 2000);
-                    }
-                });
-            })(inp);
-
-            wrapper.appendChild(lbl);
-            wrapper.appendChild(inp);
-            container.appendChild(wrapper);
-        }
-    }
+}
 </script>
 
 </body>
