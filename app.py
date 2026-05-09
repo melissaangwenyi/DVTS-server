@@ -826,6 +826,11 @@ def db_status():
                 🗑 Remove blank/invalid PIN rows
             </button>
         </form>
+        <form action="/admin/fix-pin-constraint" method="POST" style="display:inline;">
+            <button class="btn" style="background:#185FA5;" onclick="return confirm('Rebuild PIN unique index?')">
+                🔧 Rebuild PIN constraint
+            </button>
+        </form>
         <form action="/admin/reset-hosts" method="POST" style="display:inline;">
             <button class="btn btn-red" onclick="return confirm('Wipe ALL hosts?')">
                 🗑 Wipe ALL hosts
@@ -855,6 +860,47 @@ def db_purge_bad_pins():
         flash(f"Removed {deleted} row(s) with blank/null PINs. Try adding hosts again.", "success")
     except Exception as e:
         flash(f"Purge failed: {e}", "error")
+    return redirect(url_for("manage_hosts"))
+
+
+@app.route("/admin/fix-pin-constraint", methods=["POST"])
+@admin_required
+def fix_pin_constraint():
+    """One-time fix: rebuild the host_pin UNIQUE index."""
+    from data.server_db import get_connection
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        # Drop all existing unique constraints/indexes on host_pin
+        cur.execute("""
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'residents'
+            AND indexdef ILIKE '%host_pin%'
+        """)
+        indexes = [r["indexname"] for r in cur.fetchall()]
+        for idx in indexes:
+            cur.execute(f'DROP INDEX IF EXISTS "{idx}"')
+        # Also drop any named constraints
+        cur.execute("""
+            SELECT constraint_name FROM information_schema.table_constraints
+            WHERE table_name = 'residents'
+            AND constraint_type = 'UNIQUE'
+        """)
+        constraints = [r["constraint_name"] for r in cur.fetchall()]
+        for c in constraints:
+            try:
+                cur.execute(f'ALTER TABLE residents DROP CONSTRAINT IF EXISTS "{c}"')
+            except Exception:
+                conn.rollback()
+        # Recreate clean
+        cur.execute("ALTER TABLE residents ADD CONSTRAINT residents_host_pin_key UNIQUE (host_pin)")
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f"PIN constraint rebuilt (dropped: {indexes+constraints}). Try adding a host now.", "success")
+        _audit("FIX_PIN_CONSTRAINT", details=f"Rebuilt UNIQUE index on host_pin")
+    except Exception as e:
+        flash(f"Fix failed: {e}", "error")
     return redirect(url_for("manage_hosts"))
 
 # ── DB RESET (admin only) ─────────────────────────────────────────────────
