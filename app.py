@@ -61,7 +61,7 @@ from data.server_db import (  # noqa: E402
 # Load email_service safely — if the import fails for any reason,
 # replace send_host_notification with a no-op so the app still boots.
 try:
-    from data.email_service import send_host_notification
+    from data.email_service import send_host_notification  # type: ignore
 except ImportError:
     def send_host_notification(*args, **kwargs):
         print("[Email] email_service not found — notifications disabled.")

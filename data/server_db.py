@@ -498,6 +498,7 @@ def get_active_visits_server(host_unit_filter: str = None) -> list:
         query = """
             SELECT
                 vl.local_uuid, v.full_name, v.category, v.vehicle_plate,
+                v.national_id, v.phone_number,
                 vl.pax_count, vl.check_in_time, vl.estimated_minutes,
                 vl.host_unit, vl.reason_for_visit,
                 v.exception_flag,
@@ -515,6 +516,7 @@ def get_active_visits_server(host_unit_filter: str = None) -> list:
             params.append(f"%{host_unit_filter}%")
         query += """
             GROUP BY vl.local_uuid, v.full_name, v.category, v.vehicle_plate,
+                     v.national_id, v.phone_number,
                      vl.pax_count, vl.check_in_time, vl.estimated_minutes,
                      vl.host_unit, vl.reason_for_visit,
                      v.exception_flag, g_in.full_name

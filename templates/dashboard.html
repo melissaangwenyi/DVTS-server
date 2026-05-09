@@ -54,42 +54,37 @@
         <div class="form-body">
             <form method="POST" action="/checkin" id="checkinForm" autocomplete="off">
 
-                <!-- BLACKLIST / AUTOFILL ALERTS -->
                 <div class="autofill-banner" id="autofill_banner">
                     <span>✨</span>
-                    <span>Returning visitor — details filled in automatically.</span>
+                    <span>Returning visitor — details filled automatically.</span>
                 </div>
                 <div class="blacklist-alert" id="blacklist_alert">
                     <div class="title">⛔ Visitor is blacklisted</div>
                     <div class="reason" id="blacklist_reason"></div>
                     {% if session.get('role') == 'admin' %}
                     <label class="override-row">
-                        <input type="checkbox" name="blacklist_override" id="blacklist_override">
-                        Override (admin only — this action will be audited)
+                        <input type="checkbox" name="blacklist_override">
+                        Override (admin only — audited)
                     </label>
                     {% else %}
                     <div class="override-row" style="border:none;padding:0;">Only admins can override.</div>
                     {% endif %}
                 </div>
 
-                <!-- SECTION A -->
                 <div class="section-title">Visitor details</div>
 
                 <label>National ID</label>
-                <input type="text" name="national_id" id="national_id"
-                       placeholder="Numbers only"
+                <input type="text" name="national_id" id="national_id" placeholder="Numbers only"
                        oninput="enforceDigits(this,'nid_error'); maybeLookup(this.value);">
                 <div class="field-error" id="nid_error">Numbers only.</div>
 
                 <label>Full name *</label>
-                <input type="text" name="full_name" id="full_name" required
-                       placeholder="As on ID"
+                <input type="text" name="full_name" id="full_name" required placeholder="As on ID"
                        oninput="enforceLetters(this,'name_error');">
                 <div class="field-error" id="name_error">Letters only.</div>
 
                 <label>Phone</label>
-                <input type="text" name="phone_number" id="phone_number"
-                       placeholder="Numbers only"
+                <input type="text" name="phone_number" id="phone_number" placeholder="Numbers only"
                        oninput="enforceDigits(this,'phone_error');">
                 <div class="field-error" id="phone_error">Numbers only.</div>
 
@@ -101,9 +96,7 @@
                 <select name="host_unit" id="host_unit">
                     <option value="">— Select (optional) —</option>
                     {% for h in hosts %}
-                    <option value="{{ h.unit_number }}">
-                        {{ h.unit_number }} — {{ h.full_name }}
-                    </option>
+                    <option value="{{ h.unit_number }}">{{ h.unit_number }} — {{ h.full_name }}</option>
                     {% endfor %}
                 </select>
                 {% else %}
@@ -119,7 +112,7 @@
                 {% endif %}
 
                 <label>Reason for visit</label>
-                <input type="text" name="reason" placeholder="e.g. Interview, package delivery" maxlength="120">
+                <input type="text" name="reason" placeholder="e.g. Interview, package" maxlength="120">
 
                 <label>Category *</label>
                 <select name="category" id="category_select" required onchange="toggleCategory(this)">
@@ -129,9 +122,8 @@
                     <option value="Maintenance">Maintenance</option>
                     <option value="Other">Other</option>
                 </select>
-
                 <div id="delivery_note" class="info-note hidden">
-                    <span>ℹ</span><span>Delivery visits are capped at 20 minutes.</span>
+                    <span>ℹ</span><span>Delivery capped at 20 minutes.</span>
                 </div>
                 <div id="other_section" class="hidden">
                     <label>Specify *</label>
@@ -142,7 +134,6 @@
                     <input type="number" name="estimated_minutes" id="estimated_minutes" min="1">
                 </div>
 
-                <!-- SECTION B -->
                 <div class="section-title">No ID / Zero-trust</div>
                 <label class="checkbox-row">
                     <input type="checkbox" name="no_id" id="no_id_check" onchange="toggleNoId(this)">
@@ -153,7 +144,6 @@
                     <input type="password" name="host_pin">
                 </div>
 
-                <!-- SECTION C -->
                 <div class="section-title">Group check-in</div>
                 <label class="checkbox-row">
                     <input type="checkbox" name="multi_pax" id="multi_pax" onchange="togglePaxSection(this)">
@@ -190,9 +180,7 @@
                 <option value="{{ u }}" {{ 'selected' if unit_filter==u }}>{{ u }}</option>
                 {% endfor %}
             </select>
-            {% if unit_filter %}
-            <a href="/dashboard" class="btn btn-sm btn-secondary">Clear</a>
-            {% endif %}
+            {% if unit_filter %}<a href="/dashboard" class="btn btn-sm btn-secondary">Clear</a>{% endif %}
         </form>
         {% endif %}
 
@@ -201,24 +189,24 @@
         <table>
             <thead>
                 <tr>
-                    <th>Name</th>
+                    <th>Name <span class="expand-hint">click to expand</span></th>
                     <th>Category</th>
                     <th>Unit</th>
-                    <th>Reason</th>
-                    <th>Pax</th>
                     <th>Entry</th>
                     <th>Duration</th>
                     <th>By</th>
-                    <th></th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
                 {% for v in visits %}
-                <tr class="{{ 'overdue' if v.overdue else '' }}">
+                {# Build drawer data as JSON-safe attributes #}
+                <tr class="expandable {{ 'overdue' if v.overdue else '' }}"
+                    onclick="toggleDrawer('d{{ loop.index }}', this)"
+                    data-uuid="{{ v.local_uuid }}">
                     <td style="font-weight:500;">
                         {{ v.full_name }}
-                        {% if v.exception_flag %}<span style="color:var(--amber-strong);" title="No-ID entry">⚠</span>{% endif %}
+                        {% if v.exception_flag %}<span style="color:var(--amber-strong);" title="No-ID">⚠</span>{% endif %}
                         {% if v.overdue %}<span title="Overdue">🔴</span>{% endif %}
                     </td>
                     <td>
@@ -226,20 +214,10 @@
                         <span class="badge badge-{{ cl if cl in ['guest','delivery','maintenance'] else 'other' }}">{{ v.category }}</span>
                     </td>
                     <td><code>{{ v.host_unit or '—' }}</code></td>
-                    <td style="font-size:12px;color:var(--text-muted);max-width:120px;">{{ v.reason_for_visit or '—' }}</td>
-                    <td>
-                        {% if v.pax_count > 1 and v.pax_ids and v.pax_ids != '—' %}
-                        <span class="pax-badge" onclick="togglePaxIds('a{{ loop.index }}',this)" title="Click to view IDs">
-                            👥 {{ v.pax_count }} <span class="chevron">▾</span>
-                        </span>
-                        {% else %}
-                        <span class="pax-badge no-pax">{{ v.pax_count }}</span>
-                        {% endif %}
-                    </td>
                     <td style="white-space:nowrap;">{{ v.entry_display }}</td>
                     <td style="white-space:nowrap;">{{ v.duration }}</td>
                     <td style="font-size:11px;color:var(--text-muted);">{{ v.checkin_guard_name or '—' }}</td>
-                    <td>
+                    <td onclick="event.stopPropagation();">
                         <form method="POST" action="/checkout"
                               onsubmit="return confirm('Check out {{ v.full_name }}?')">
                             <input type="hidden" name="log_uuid" value="{{ v.local_uuid }}">
@@ -247,18 +225,47 @@
                         </form>
                     </td>
                 </tr>
-                {% if v.pax_count > 1 and v.pax_ids and v.pax_ids != '—' %}
-                <tr id="pax-a{{ loop.index }}" class="pax-detail-row hidden">
-                    <td colspan="10">
-                        <strong style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Associated IDs:</strong>
-                        <div class="pax-ids-list" style="margin-top:4px;">
-                            {% for pid in v.pax_ids.split(' | ') %}
-                            <span class="pax-id-chip">{{ pid }}</span>
-                            {% endfor %}
+                {# DETAIL DRAWER ROW #}
+                <tr id="d{{ loop.index }}" class="detail-drawer hidden">
+                    <td colspan="7">
+                        <div class="drawer-inner">
+                            <div class="drawer-field">
+                                <span class="df-label">National ID</span>
+                                <span class="df-value mono">{{ v.national_id if v.national_id else '— (no ID)' }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Phone</span>
+                                <span class="df-value">{{ v.phone_number or '—' }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Vehicle plate</span>
+                                <span class="df-value mono">{{ v.vehicle_plate or '—' }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Reason for visit</span>
+                                <span class="df-value muted">{{ v.reason_for_visit or '—' }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Group size</span>
+                                <span class="df-value">{{ v.pax_count }} person{{ 's' if v.pax_count > 1 else '' }}</span>
+                            </div>
+                            {% if v.pax_count > 1 and v.pax_ids and v.pax_ids != '—' %}
+                            <div class="drawer-field">
+                                <span class="df-label">Associated IDs</span>
+                                <span class="df-value mono">{{ v.pax_ids }}</span>
+                            </div>
+                            {% endif %}
+                            <div class="drawer-field">
+                                <span class="df-label">Check-in time</span>
+                                <span class="df-value">{{ v.check_in_time }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Entry type</span>
+                                <span class="df-value">{{ '⚠ Zero-trust (no ID)' if v.exception_flag else '✓ Standard' }}</span>
+                            </div>
                         </div>
                     </td>
                 </tr>
-                {% endif %}
                 {% endfor %}
             </tbody>
         </table>
@@ -279,14 +286,29 @@
 </div>
 
 <script>
-var _lookupTimer = null;
+/* ── DRAWER ── */
+function toggleDrawer(id, row) {
+    var drawer = document.getElementById(id);
+    if (!drawer) return;
+    var isOpen = !drawer.classList.contains('hidden');
+    // Close all open drawers first
+    document.querySelectorAll('.detail-drawer').forEach(function(d) { d.classList.add('hidden'); });
+    document.querySelectorAll('tr.expandable').forEach(function(r) { r.classList.remove('expanded'); });
+    if (!isOpen) {
+        drawer.classList.remove('hidden');
+        row.classList.add('expanded');
+    }
+}
+
+/* ── AUTOFILL ── */
+var _lt = null;
 function maybeLookup(val) {
     var nid = (val||'').replace(/\D/g,'');
     document.getElementById('autofill_banner').classList.remove('visible');
     document.getElementById('blacklist_alert').classList.remove('visible');
-    if (_lookupTimer) clearTimeout(_lookupTimer);
+    if (_lt) clearTimeout(_lt);
     if (nid.length < 5) return;
-    _lookupTimer = setTimeout(function() {
+    _lt = setTimeout(function() {
         fetch('/api/lookup-visitor?nid='+encodeURIComponent(nid))
             .then(function(r){return r.json();})
             .then(function(d){
@@ -307,30 +329,22 @@ function maybeLookup(val) {
     }, 400);
 }
 
-function togglePaxIds(id, el) {
-    var row = document.getElementById('pax-'+id);
-    if(row) row.classList.toggle('hidden');
-    el.classList.toggle('expanded');
-}
-
+/* ── VALIDATION ── */
 function enforceDigits(input, errId) {
     var c=input.value.replace(/\D/g,'');
-    if(input.value!==c){
-        input.value=c; input.classList.add('error-field');
-        var e=document.getElementById(errId); if(e) e.classList.add('visible');
-        setTimeout(function(){input.classList.remove('error-field'); if(e) e.classList.remove('visible');},2500);
-    }
+    if(input.value!==c){input.value=c;flash(input,errId);}
 }
-
 function enforceLetters(input, errId) {
     var c=input.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g,'');
-    if(input.value!==c){
-        input.value=c; input.classList.add('error-field');
-        var e=document.getElementById(errId); if(e) e.classList.add('visible');
-        setTimeout(function(){input.classList.remove('error-field'); if(e) e.classList.remove('visible');},2500);
-    }
+    if(input.value!==c){input.value=c;flash(input,errId);}
+}
+function flash(input, errId) {
+    input.classList.add('error-field');
+    var e=document.getElementById(errId); if(e) e.classList.add('visible');
+    setTimeout(function(){input.classList.remove('error-field'); if(e) e.classList.remove('visible');},2500);
 }
 
+/* ── CATEGORY ── */
 function toggleCategory(sel) {
     var dur=document.getElementById('duration_section'),
         oth=document.getElementById('other_section'),
@@ -348,40 +362,34 @@ function toggleCategory(sel) {
     }
 }
 
+/* ── NO ID ── */
 function toggleNoId(cb) {
-    var pin=document.getElementById('pin_section'),
-        nid=document.getElementById('national_id');
+    var pin=document.getElementById('pin_section'), nid=document.getElementById('national_id');
     if(cb.checked){
-        pin.classList.remove('hidden');
-        nid.disabled=true; nid.required=false; nid.value='';
+        pin.classList.remove('hidden'); nid.disabled=true; nid.required=false; nid.value='';
         document.getElementById('autofill_banner').classList.remove('visible');
         document.getElementById('blacklist_alert').classList.remove('visible');
-    } else {
-        pin.classList.add('hidden');
-        nid.disabled=false;
-    }
+    } else { pin.classList.add('hidden'); nid.disabled=false; }
 }
 
+/* ── GROUP PAX ── */
 function togglePaxSection(cb) {
     var s=document.getElementById('pax_section');
     if(cb.checked){s.classList.remove('hidden'); buildPaxFields(1);}
     else{s.classList.add('hidden'); document.getElementById('pax_fields').innerHTML='';}
 }
-
 function buildPaxFields(count) {
     var c=document.getElementById('pax_fields'); c.innerHTML='';
     for(var i=1;i<=count;i++){
         var d=document.createElement('div');
         var l=document.createElement('label'); l.textContent='Visitor '+i+' — National ID *'; l.style.marginTop='6px';
         var inp=document.createElement('input');
-        inp.type='text'; inp.name='associated_id_'+i; inp.required=true;
-        inp.placeholder='Numbers only';
-        (function(el){
-            el.addEventListener('input',function(){
-                var clean=el.value.replace(/\D/g,'');
-                if(el.value!==clean){el.value=clean; el.classList.add('error-field'); setTimeout(function(){el.classList.remove('error-field');},2000);}
-            });
-        })(inp);
+        inp.type='text'; inp.name='associated_id_'+i; inp.required=true; inp.placeholder='Numbers only';
+        (function(el){el.addEventListener('input',function(){
+            var clean=el.value.replace(/\D/g,'');
+            if(el.value!==clean){el.value=clean; el.classList.add('error-field');
+            setTimeout(function(){el.classList.remove('error-field');},2000);}
+        });})(inp);
         d.appendChild(l); d.appendChild(inp); c.appendChild(d);
     }
 }

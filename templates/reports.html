@@ -128,12 +128,9 @@
         <table>
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>National ID</th>
+                    <th>Name <span class="expand-hint">click to expand</span></th>
                     <th>Category</th>
                     <th>Unit</th>
-                    <th>Reason</th>
-                    <th>Pax</th>
                     <th>Check-in</th>
                     <th>Check-out</th>
                     <th>Duration</th>
@@ -144,46 +141,71 @@
             </thead>
             <tbody>
                 {% for r in history %}
-                <tr class="{{ 'was-overdue' if r.was_overdue else '' }}">
-                    <td style="font-weight:500;">{{ r.full_name }}</td>
-                    <td style="font-family:monospace;font-size:12px;">{{ r.national_id or '—' }}</td>
+                <tr class="expandable {{ 'was-overdue' if r.was_overdue else '' }}"
+                    onclick="toggleDrawer('r{{ loop.index }}', this)">
+                    <td style="font-weight:500;">
+                        {{ r.full_name }}
+                        {% if r.was_overdue %}<span title="Overdue">🔴</span>{% endif %}
+                        {% if r.exception_flag %}<span title="No-ID entry">⚠</span>{% endif %}
+                    </td>
                     <td>
                         {% set cl = r.category|lower %}
                         <span class="badge badge-{{ cl if cl in ['guest','delivery','maintenance'] else 'other' }}">{{ r.category }}</span>
                     </td>
                     <td><code>{{ r.host_unit or '—' }}</code></td>
-                    <td style="font-size:12px;color:var(--text-muted);max-width:120px;">{{ r.reason_for_visit or '—' }}</td>
-                    <td>
-                        {% if r.pax_count > 1 and r.pax_ids and r.pax_ids != '—' %}
-                        <span class="pax-badge" onclick="togglePaxIds('r{{ loop.index }}',this)">
-                            👥 {{ r.pax_count }} <span class="chevron">▾</span>
-                        </span>
-                        {% else %}
-                        <span class="pax-badge no-pax">{{ r.pax_count }}</span>
-                        {% endif %}
-                    </td>
                     <td style="white-space:nowrap;">{{ r.check_in_display }}</td>
                     <td style="white-space:nowrap;">{{ r.check_out_display }}</td>
                     <td style="white-space:nowrap;">{{ r.duration }}</td>
                     <td style="font-size:11px;color:var(--text-muted);">{{ r.checkin_guard_name or '—' }}</td>
                     <td style="font-size:11px;color:var(--text-muted);">{{ r.checkout_guard_name or '—' }}</td>
-                    <td>
-                        {% if r.was_overdue %}🔴
-                        {% elif r.exception_flag %}⚠
-                        {% else %}—{% endif %}
-                    </td>
+                    <td>{% if r.was_overdue %}🔴{% elif r.exception_flag %}⚠{% else %}—{% endif %}</td>
                 </tr>
-                {% if r.pax_count > 1 and r.pax_ids and r.pax_ids != '—' %}
-                <tr id="pax-r{{ loop.index }}" class="pax-detail-row hidden">
-                    <td colspan="12">
-                        <div class="pax-ids-list">
-                            {% for pid in r.pax_ids.split(' | ') %}
-                            <span class="pax-id-chip">{{ pid }}</span>
-                            {% endfor %}
+
+                {# DETAIL DRAWER #}
+                <tr id="r{{ loop.index }}" class="detail-drawer hidden">
+                    <td colspan="9">
+                        <div class="drawer-inner">
+                            <div class="drawer-field">
+                                <span class="df-label">National ID</span>
+                                <span class="df-value mono">{{ r.national_id or '— (no ID)' }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Category</span>
+                                <span class="df-value">{{ r.category }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Reason for visit</span>
+                                <span class="df-value muted">{{ r.reason_for_visit or '—' }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Group size</span>
+                                <span class="df-value">{{ r.pax_count }} person{{ 's' if r.pax_count > 1 else '' }}</span>
+                            </div>
+                            {% if r.pax_count > 1 and r.pax_ids and r.pax_ids != '—' %}
+                            <div class="drawer-field">
+                                <span class="df-label">Associated IDs</span>
+                                <span class="df-value mono">{{ r.pax_ids }}</span>
+                            </div>
+                            {% endif %}
+                            <div class="drawer-field">
+                                <span class="df-label">Check-in (exact)</span>
+                                <span class="df-value mono">{{ r.check_in_time }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Check-out (exact)</span>
+                                <span class="df-value mono">{{ r.check_out_time }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Entry type</span>
+                                <span class="df-value">{{ '⚠ Zero-trust (no ID)' if r.exception_flag else '✓ Standard' }}</span>
+                            </div>
+                            <div class="drawer-field">
+                                <span class="df-label">Overdue</span>
+                                <span class="df-value">{{ '🔴 Yes' if r.was_overdue else '✓ No' }}</span>
+                            </div>
                         </div>
                     </td>
                 </tr>
-                {% endif %}
                 {% endfor %}
             </tbody>
         </table>
@@ -199,10 +221,16 @@
 </div>
 
 <script>
-function togglePaxIds(id, el) {
-    var row=document.getElementById('pax-'+id);
-    if(row) row.classList.toggle('hidden');
-    el.classList.toggle('expanded');
+function toggleDrawer(id, row) {
+    var drawer = document.getElementById(id);
+    if (!drawer) return;
+    var isOpen = !drawer.classList.contains('hidden');
+    document.querySelectorAll('.detail-drawer').forEach(function(d){ d.classList.add('hidden'); });
+    document.querySelectorAll('tr.expandable').forEach(function(r){ r.classList.remove('expanded'); });
+    if (!isOpen) {
+        drawer.classList.remove('hidden');
+        row.classList.add('expanded');
+    }
 }
 </script>
 

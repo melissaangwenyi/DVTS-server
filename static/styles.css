@@ -949,3 +949,52 @@ tr.self-row td:first-child::before {
     background: var(--teal);
     color: #fff;
 }
+
+/* ── EXPANDABLE ROW DETAIL DRAWER ──────────────────────────────────────── */
+tbody tr.expandable { cursor: pointer; }
+tbody tr.expandable:hover td { background: var(--teal-soft); }
+tbody tr.expandable.expanded td { background: var(--teal-soft); }
+
+tr.detail-drawer { background: var(--surface-alt) !important; }
+tr.detail-drawer:hover { background: var(--surface-alt) !important; }
+tr.detail-drawer td { padding: 0 !important; border-bottom: 2px solid var(--teal); }
+
+.drawer-inner {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    padding: 16px 20px;
+    animation: drawerIn 0.15s ease;
+}
+@keyframes drawerIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.drawer-field { display: flex; flex-direction: column; gap: 3px; }
+.drawer-field .df-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-faint);
+}
+.drawer-field .df-value {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 500;
+    word-break: break-all;
+}
+.drawer-field .df-value.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+.drawer-field .df-value.muted { color: var(--text-muted); font-weight: 400; }
+
+.expand-hint {
+    font-size: 10px;
+    color: var(--text-faint);
+    margin-left: 6px;
+    font-weight: 400;
+    vertical-align: middle;
+}
