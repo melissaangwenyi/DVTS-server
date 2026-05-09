@@ -768,6 +768,95 @@ def audit_log():
 
 
 
+
+# ── DB DIAGNOSTIC & FIX (admin only, safe to run any time) ───────────────
+
+@app.route("/admin/db-status")
+@admin_required
+def db_status():
+    """Shows raw DB state — use this to diagnose PIN issues."""
+    from data.server_db import get_connection
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) AS cnt FROM residents")
+        host_count = cur.fetchone()["cnt"]
+
+        cur.execute("SELECT resident_id, full_name, unit_number, host_pin, is_active FROM residents ORDER BY resident_id")
+        hosts = [dict(r) for r in cur.fetchall()]
+
+        cur.execute("SELECT COUNT(*) AS cnt FROM visit_logs")
+        visit_count = cur.fetchone()["cnt"]
+
+        cur.execute("SELECT COUNT(*) AS cnt FROM visitors")
+        visitor_count = cur.fetchone()["cnt"]
+
+        cur.close()
+        conn.close()
+
+        rows = "".join(
+            f"<tr><td>{h['resident_id']}</td><td>{h['full_name']}</td>"
+            f"<td>{h['unit_number']}</td>"
+            f"<td style='font-family:monospace'>[{repr(h['host_pin'])}]</td>"
+            f"<td>{'Active' if h['is_active'] else 'Inactive'}</td></tr>"
+            for h in hosts
+        )
+
+        html = f"""<!DOCTYPE html><html><head>
+        <style>body{{font-family:sans-serif;padding:24px;}}
+        table{{border-collapse:collapse;width:100%;}}
+        th,td{{border:1px solid #ccc;padding:8px;text-align:left;}}
+        th{{background:#f0f0f0;}}
+        .btn{{display:inline-block;padding:10px 18px;background:#008564;color:#fff;
+              text-decoration:none;border-radius:6px;margin:6px 4px;border:none;cursor:pointer;font-size:14px;}}
+        .btn-red{{background:#a32d2d;}}
+        </style></head><body>
+        <h2>🛠 DB Status</h2>
+        <p>Hosts: <strong>{host_count}</strong> &nbsp;|&nbsp;
+           Visits: <strong>{visit_count}</strong> &nbsp;|&nbsp;
+           Visitors: <strong>{visitor_count}</strong></p>
+        <h3>Residents table (raw)</h3>
+        <table><tr><th>ID</th><th>Name</th><th>Unit</th><th>PIN (exact)</th><th>Active</th></tr>
+        {rows if rows else '<tr><td colspan=5>Empty</td></tr>'}
+        </table>
+        <br>
+        <form action="/admin/db-purge-bad-pins" method="POST" style="display:inline;">
+            <button class="btn" onclick="return confirm('Remove rows with blank/null PINs?')">
+                🗑 Remove blank/invalid PIN rows
+            </button>
+        </form>
+        <form action="/admin/reset-hosts" method="POST" style="display:inline;">
+            <button class="btn btn-red" onclick="return confirm('Wipe ALL hosts?')">
+                🗑 Wipe ALL hosts
+            </button>
+        </form>
+        <br><br><a href="/manage-hosts" class="btn">← Back to Hosts</a>
+        </body></html>"""
+        return html
+    except Exception as e:
+        return f"<pre>Error: {e}</pre>", 500
+
+
+@app.route("/admin/db-purge-bad-pins", methods=["POST"])
+@admin_required
+def db_purge_bad_pins():
+    """Removes any residents rows where host_pin is NULL, empty, or whitespace."""
+    from data.server_db import get_connection
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM residents WHERE host_pin IS NULL OR TRIM(host_pin) = ''")
+        deleted = cur.rowcount
+        conn.commit()
+        cur.close()
+        conn.close()
+        _audit("DB_PURGE_BAD_PINS", details=f"Removed {deleted} bad-PIN rows")
+        flash(f"Removed {deleted} row(s) with blank/null PINs. Try adding hosts again.", "success")
+    except Exception as e:
+        flash(f"Purge failed: {e}", "error")
+    return redirect(url_for("manage_hosts"))
+
 # ── DB RESET (admin only) ─────────────────────────────────────────────────
 
 @app.route("/admin/reset-hosts", methods=["POST"])
