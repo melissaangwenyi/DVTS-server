@@ -75,6 +75,7 @@
 
                 <label>National ID</label>
                 <input type="text" name="national_id" id="national_id" placeholder="e.g. 30012345"
+                       required
                        oninput="enforceDigits(this,'nid_error'); maybeLookup(this.value);">
                 <div class="field-error" id="nid_error">Numbers only.</div>
 
@@ -111,8 +112,8 @@
                 <input type="hidden" name="host_unit" value="">
                 {% endif %}
 
-                <label>Reason for visit</label>
-                <input type="text" name="reason" placeholder="e.g. Job interview, package delivery" maxlength="120">
+                <label>Reason for visit *</label>
+                <input type="text" name="reason" required placeholder="e.g. Job interview, package delivery" maxlength="120">
 
                 <label>Category *</label>
                 <select name="category" id="category_select" required onchange="toggleCategory(this)">
