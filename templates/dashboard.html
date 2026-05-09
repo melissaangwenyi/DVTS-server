@@ -74,17 +74,17 @@
                 <div class="section-title">Visitor details</div>
 
                 <label>National ID</label>
-                <input type="text" name="national_id" id="national_id" placeholder="Numbers only"
+                <input type="text" name="national_id" id="national_id" placeholder="e.g. 30012345"
                        oninput="enforceDigits(this,'nid_error'); maybeLookup(this.value);">
                 <div class="field-error" id="nid_error">Numbers only.</div>
 
                 <label>Full name *</label>
-                <input type="text" name="full_name" id="full_name" required placeholder="As on ID"
+                <input type="text" name="full_name" id="full_name" required placeholder="e.g. John Kamau"
                        oninput="enforceLetters(this,'name_error');">
                 <div class="field-error" id="name_error">Letters only.</div>
 
                 <label>Phone</label>
-                <input type="text" name="phone_number" id="phone_number" placeholder="Numbers only"
+                <input type="text" name="phone_number" id="phone_number" placeholder="e.g. 30012345"
                        oninput="enforceDigits(this,'phone_error');">
                 <div class="field-error" id="phone_error">Numbers only.</div>
 
@@ -93,8 +93,8 @@
 
                 <label>Visiting unit / office</label>
                 {% if hosts %}
-                <select name="host_unit" id="host_unit">
-                    <option value="">— Select (optional) —</option>
+                <select name="host_unit" id="host_unit" required>
+                    <option value="">— Select unit / office —</option>
                     {% for h in hosts %}
                     <option value="{{ h.unit_number }}">{{ h.unit_number }} — {{ h.full_name }}</option>
                     {% endfor %}
@@ -112,7 +112,7 @@
                 {% endif %}
 
                 <label>Reason for visit</label>
-                <input type="text" name="reason" placeholder="e.g. Interview, package" maxlength="120">
+                <input type="text" name="reason" placeholder="e.g. Job interview, package delivery" maxlength="120">
 
                 <label>Category *</label>
                 <select name="category" id="category_select" required onchange="toggleCategory(this)">

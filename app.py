@@ -301,6 +301,9 @@ def checkin():
     if not full_name or not category:
         flash("Full name and category are required.", "error")
         return redirect(url_for("dashboard"))
+    if not host_unit:
+        flash("Please select a unit or office for this visit.", "error")
+        return redirect(url_for("dashboard"))
     if not no_id and not national_id:
         flash("National ID is required (or tick 'Visitor has NO ID').", "error")
         return redirect(url_for("dashboard"))
