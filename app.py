@@ -922,139 +922,123 @@ def fix_pin_constraint():
 @app.route("/admin/full-reset-and-seed", methods=["POST"])
 @admin_required
 def full_reset_and_seed():
-    """
-    Wipes ALL visit data + hosts, then seeds realistic demo data:
-    - 6 hosts (mix of office and residential)
-    - 20 completed visits spread across the last 7 days
-    - 3 active (currently on premises) visits
-    """
     from data.server_db import get_connection
     import uuid as _uuid
-    from datetime import datetime, timezone, timedelta, date
+    from datetime import datetime, timezone, timedelta
     import random
 
     EAT = timezone(timedelta(hours=3))
-
-    def eat_str(dt):
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    def ts(dt): return dt.strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now(EAT).replace(tzinfo=None)
 
     try:
         conn = get_connection()
         cur  = conn.cursor()
 
-        # ── WIPE ──────────────────────────────────────────────────────────
+        # ── WIPE EVERYTHING ───────────────────────────────────────────────
         cur.execute("DELETE FROM associated_passengers")
         cur.execute("DELETE FROM visit_logs")
         cur.execute("DELETE FROM visitors")
         cur.execute("DELETE FROM residents")
 
-        # ── SEED HOSTS ────────────────────────────────────────────────────
-        hosts = [
-            ("Dr. James Mwangi",    "A-101",     "residential", "1234", "0712000001", None),
-            ("Prof. Grace Otieno",  "A-102",     "residential", "5678", "0712000002", None),
-            ("Mr. Peter Kamau",     "B-201",     "residential", "2468", "0712000003", None),
-            ("Acme Technologies",   "Suite 301", "office",      "9999", "0700100001", None),
-            ("Nairobi Consultants", "Suite 402", "office",      "7777", "0700100002", None),
-            ("HR Department",       "Suite 101", "office",      "4321", "0700100003", None),
-        ]
-        host_units = []
-        for (name, unit, htype, pin, phone, email) in hosts:
-            cur.execute("""
-                INSERT INTO residents
-                    (full_name, unit_number, host_pin, phone, host_type, host_email, is_active)
-                VALUES (%s, %s, %s, %s, %s, %s, TRUE)
-            """, (name, unit, pin, phone, htype, email))
-            host_units.append(unit)
+        # Fix the SERIAL sequence — this is the root cause of the null ID bug
+        cur.execute("DROP SEQUENCE IF EXISTS residents_resident_id_seq CASCADE")
+        cur.execute("CREATE SEQUENCE residents_resident_id_seq START 1")
+        cur.execute("ALTER TABLE residents ALTER COLUMN resident_id SET DEFAULT nextval('residents_resident_id_seq')")
+        cur.execute("ALTER SEQUENCE residents_resident_id_seq OWNED BY residents.resident_id")
 
-        # ── SEED COMPLETED VISITS ─────────────────────────────────────────
+        # ── SEED HOSTS ────────────────────────────────────────────────────
+        hosts_data = [
+            ("Dr. James Mwangi",    "A-101",     "1234", "0712000001", "residential"),
+            ("Prof. Grace Otieno",  "A-102",     "5678", "0712000002", "residential"),
+            ("Mr. Peter Kamau",     "B-201",     "2468", "0712000003", "residential"),
+            ("Acme Technologies",   "Suite 301", "9999", "0700100001", "office"),
+            ("Nairobi Consultants", "Suite 402", "7777", "0700100002", "office"),
+            ("HR Department",       "Suite 101", "4321", "0700100003", "office"),
+        ]
+        units = []
+        for i, (name, unit, pin, phone, htype) in enumerate(hosts_data, start=1):
+            cur.execute(
+                "INSERT INTO residents (resident_id, full_name, unit_number, host_pin, phone, host_type, is_active) "
+                "VALUES (%s, %s, %s, %s, %s, %s, TRUE)",
+                (i, name, unit, pin, phone, htype)
+            )
+            units.append(unit)
+        # Sync sequence after manual IDs
+        cur.execute("SELECT setval('residents_resident_id_seq', %s)", (len(hosts_data),))
+
+        # ── SEED COMPLETED VISITS (20) ────────────────────────────────────
         first_names = ["Alice","Brian","Carol","David","Eve","Frank","Grace",
                        "Henry","Iris","James","Karen","Leo","Mary","Noel",
                        "Olivia","Paul","Queen","Robert","Sarah","Tom"]
-        last_names  = ["Kimani","Ochieng","Waweru","Muthoni","Otieno","Kariuki",
-                       "Njoroge","Achieng","Mugo","Wanjiku"]
-        categories  = ["Guest","Guest","Guest","Delivery","Maintenance","Guest"]
+        last_names  = ["Kimani","Ochieng","Waweru","Muthoni","Otieno","Kariuki"]
+        categories  = ["Guest","Guest","Guest","Delivery","Maintenance"]
         reasons     = ["Job interview","Package delivery","Social visit",
-                       "Meeting","Equipment check","Parcel pickup",
-                       "Client visit","Maintenance work","Personal visit",""]
-        guards      = [1]  # admin guard_id
+                       "Meeting","Equipment check","Client visit","AC repair",""]
 
-        now = datetime.now(EAT).replace(tzinfo=None)
-
-        completed_visits = []
+        random.seed(42)
         for i, fname in enumerate(first_names):
-            lname = random.choice(last_names)
-            full_name = f"{fname} {lname}"
-            nid = str(random.randint(10000000, 39999999))
-            category = random.choice(categories)
-            unit = random.choice(host_units)
-            reason = random.choice(reasons)
-
-            # spread over last 7 days
+            lname   = random.choice(last_names)
+            nid     = str(random.randint(10000000, 39999999))
+            cat     = random.choice(categories)
+            unit    = random.choice(units)
+            reason  = random.choice(reasons)
             days_ago = random.randint(0, 6)
             hour_in  = random.randint(7, 16)
-            min_in   = random.randint(0, 59)
-            duration = random.randint(10, 180)  # minutes
-
-            ci = now - timedelta(days=days_ago, hours=(now.hour - hour_in),
-                                  minutes=(now.minute - min_in))
-            # clamp to business hours roughly
-            ci = ci.replace(hour=hour_in, minute=min_in, second=0)
-            co = ci + timedelta(minutes=duration)
-
+            dur      = random.randint(15, 180)
+            ci = now.replace(hour=hour_in, minute=random.randint(0,59), second=0) - timedelta(days=days_ago)
+            co = ci + timedelta(minutes=dur)
             v_uuid = str(_uuid.uuid4())
             l_uuid = str(_uuid.uuid4())
-
-            cur.execute("""
-                INSERT INTO visitors
-                    (local_uuid, full_name, national_id, category, exception_flag, created_at)
-                VALUES (%s,%s,%s,%s,FALSE,%s)
-            """, (v_uuid, full_name, nid, category, eat_str(ci)))
-
-            cur.execute("""
-                INSERT INTO visit_logs
-                    (local_uuid, visitor_uuid, guard_id, pax_count,
-                     check_in_time, check_out_time, checkout_guard_id,
-                     host_unit, reason_for_visit)
-                VALUES (%s,%s,1,1,%s,%s,1,%s,%s)
-            """, (l_uuid, v_uuid, eat_str(ci), eat_str(co), unit, reason or None))
+            cur.execute(
+                "INSERT INTO visitors (local_uuid, full_name, national_id, category, exception_flag, created_at) "
+                "VALUES (%s,%s,%s,%s,FALSE,%s)",
+                (v_uuid, f"{fname} {lname}", nid, cat, ts(ci))
+            )
+            cur.execute(
+                "INSERT INTO visit_logs (local_uuid, visitor_uuid, guard_id, pax_count, "
+                "check_in_time, check_out_time, checkout_guard_id, host_unit, reason_for_visit) "
+                "VALUES (%s,%s,1,1,%s,%s,1,%s,%s)",
+                (l_uuid, v_uuid, ts(ci), ts(co), unit, reason or None)
+            )
 
         # ── SEED 3 ACTIVE VISITS ──────────────────────────────────────────
         active = [
-            ("John Doe",   "22345678", "Guest",       host_units[0], "Social visit",    45),
-            ("Mary Smith", "33456789", "Delivery",    host_units[3], "Package delivery", 8),
-            ("Ali Hassan", "44567890", "Maintenance", host_units[4], "AC repair",       30),
+            ("John Doe",   "22345678", "Guest",       units[0], "Social visit",    45),
+            ("Mary Smith", "33456789", "Delivery",    units[3], "Package delivery", 8),
+            ("Ali Hassan", "44567890", "Maintenance", units[4], "AC repair",       30),
         ]
         for (name, nid, cat, unit, reason, mins_ago) in active:
+            ci = now - timedelta(minutes=mins_ago)
             v_uuid = str(_uuid.uuid4())
             l_uuid = str(_uuid.uuid4())
-            ci = now - timedelta(minutes=mins_ago)
-            cur.execute("""
-                INSERT INTO visitors
-                    (local_uuid, full_name, national_id, category, exception_flag, created_at)
-                VALUES (%s,%s,%s,%s,FALSE,%s)
-            """, (v_uuid, name, nid, cat, eat_str(ci)))
-            cur.execute("""
-                INSERT INTO visit_logs
-                    (local_uuid, visitor_uuid, guard_id, pax_count,
-                     check_in_time, host_unit, reason_for_visit)
-                VALUES (%s,%s,1,1,%s,%s,%s)
-            """, (l_uuid, v_uuid, eat_str(ci), unit, reason))
+            cur.execute(
+                "INSERT INTO visitors (local_uuid, full_name, national_id, category, exception_flag, created_at) "
+                "VALUES (%s,%s,%s,%s,FALSE,%s)",
+                (v_uuid, name, nid, cat, ts(ci))
+            )
+            cur.execute(
+                "INSERT INTO visit_logs (local_uuid, visitor_uuid, guard_id, pax_count, "
+                "check_in_time, host_unit, reason_for_visit) "
+                "VALUES (%s,%s,1,1,%s,%s,%s)",
+                (l_uuid, v_uuid, ts(ci), unit, reason)
+            )
 
         conn.commit()
         cur.close()
         conn.close()
-
-        _audit("FULL_RESET_AND_SEED", details="Wiped all data and seeded 6 hosts, 20 visits, 3 active")
-        flash("✅ Reset complete — 6 hosts, 20 completed visits, and 3 active visitors seeded.", "success")
+        _audit("FULL_RESET_AND_SEED", details="Wiped all data, fixed sequence, seeded 6 hosts + 23 visits")
+        flash("Reset complete — 6 hosts, 20 completed visits, 3 active visitors seeded.", "success")
 
     except Exception as e:
         import traceback
         flash(f"Seed failed: {e}", "error")
         print(traceback.format_exc())
+        try: conn.rollback()
+        except: pass
 
     return redirect(url_for("dashboard"))
 
-# ── DB RESET (admin only) ─────────────────────────────────────────────────
 
 @app.route("/admin/reset-hosts", methods=["POST"])
 @admin_required
