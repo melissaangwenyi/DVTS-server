@@ -61,7 +61,7 @@ from data.server_db import (  # noqa: E402
 # Load email_service safely — if the import fails for any reason,
 # replace send_host_notification with a no-op so the app still boots.
 try:
-    from data.email_service import send_host_notification  # type: ignore
+    from data.email_service import send_host_notification
 except ImportError:
     def send_host_notification(*args, **kwargs):
         print("[Email] email_service not found — notifications disabled.")
@@ -767,6 +767,82 @@ def audit_log():
     )
 
 
+
+
+
+@app.route("/admin/test-email")
+@admin_required
+def test_email():
+    """Send a test email to diagnose SMTP issues."""
+    import os, smtplib, ssl
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.utils import formataddr
+
+    smtp_host = os.environ.get("SMTP_HOST", "")
+    smtp_port = os.environ.get("SMTP_PORT", "587")
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "")
+    from_name = os.environ.get("SMTP_FROM_NAME", "VTS")
+
+    config_html = (
+        f"<b>SMTP_HOST:</b> {smtp_host or 'NOT SET'}<br>"
+        f"<b>SMTP_PORT:</b> {smtp_port}<br>"
+        f"<b>SMTP_USER:</b> {smtp_user or 'NOT SET'}<br>"
+        f"<b>SMTP_PASSWORD:</b> {'SET (' + str(len(smtp_pass)) + ' chars)' if smtp_pass else 'NOT SET'}<br>"
+        f"<b>SMTP_FROM_NAME:</b> {from_name}"
+    )
+
+    result = ""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "VTS Email Test"
+        msg["From"]    = formataddr((from_name, smtp_user))
+        msg["To"]      = smtp_user
+        msg.attach(MIMEText("Test email from your Visitor Tracking System. If you receive this, email is working.", "plain"))
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, int(smtp_port), timeout=15) as srv:
+            srv.ehlo(); srv.starttls(context=ctx); srv.ehlo()
+            srv.login(smtp_user, smtp_pass)
+            srv.send_message(msg)
+        result = "<span style='color:green;font-weight:700;'>SUCCESS — test email sent to " + smtp_user + "</span>"
+    except Exception as e:
+        result = "<span style='color:red;font-weight:700;'>FAILED: " + str(e) + "</span>"
+
+    from data.server_db import get_connection
+    host_rows = ""
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("SELECT full_name, unit_number, host_email FROM residents WHERE is_active=TRUE ORDER BY unit_number")
+        for r in cur.fetchall():
+            color = "green" if r["host_email"] else "red"
+            val   = r["host_email"] or "NO EMAIL SET"
+            host_rows += f"<tr><td>{r['full_name']}</td><td>{r['unit_number']}</td><td style='color:{color}'>{val}</td></tr>"
+        cur.close(); conn.close()
+    except Exception as e:
+        host_rows = f"<tr><td colspan=3>DB error: {e}</td></tr>"
+
+    return (
+        "<!DOCTYPE html><html><head><style>"
+        "body{font-family:sans-serif;padding:24px;max-width:700px;}"
+        "table{border-collapse:collapse;width:100%;margin-top:10px;}"
+        "th,td{border:1px solid #ddd;padding:8px;font-size:13px;text-align:left;}"
+        "th{background:#f5f5f5;}.box{background:#f9f9f9;border:1px solid #ddd;"
+        "border-radius:6px;padding:14px;margin:12px 0;font-size:13px;line-height:1.8;}"
+        ".btn{display:inline-block;padding:10px 18px;background:#008564;color:#fff;"
+        "text-decoration:none;border-radius:6px;margin-top:16px;}"
+        "</style></head><body>"
+        "<h2>Email Diagnostic</h2>"
+        "<div class='box'>" + config_html + "</div>"
+        "<p><b>Test send result:</b> " + result + "</p>"
+        "<h3 style='margin-top:20px;'>Host emails in DB</h3>"
+        "<table><tr><th>Host</th><th>Unit</th><th>Email</th></tr>" + host_rows + "</table>"
+        "<p style='margin-top:14px;font-size:12px;color:#666;'>"
+        "Email fires only when: (1) SMTP vars set, (2) visitor selects a unit at check-in, "
+        "(3) that unit has an email saved in the hosts table.</p>"
+        "<a href='/dashboard' class='btn'>Back to Dashboard</a>"
+        "</body></html>"
+    )
 
 
 # ── DB DIAGNOSTIC & FIX (admin only, safe to run any time) ───────────────
