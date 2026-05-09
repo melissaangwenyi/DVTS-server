@@ -61,7 +61,7 @@ from data.server_db import (  # noqa: E402
 # Load email_service safely — if the import fails for any reason,
 # replace send_host_notification with a no-op so the app still boots.
 try:
-    from data.email_service import send_host_notification  # type: ignore
+    from data.email_service import send_host_notification
 except ImportError:
     def send_host_notification(*args, **kwargs):
         print("[Email] email_service not found — notifications disabled.")
@@ -836,6 +836,12 @@ def db_status():
                 🗑 Wipe ALL hosts
             </button>
         </form>
+        <form action="/admin/full-reset-and-seed" method="POST" style="display:inline;">
+            <button class="btn" style="background:#3B6D11;"
+                    onclick="return confirm('Wipe ALL data and seed demo data? Cannot be undone.')">
+                🌱 Full reset + seed demo data
+            </button>
+        </form>
         <br><br><a href="/manage-hosts" class="btn">← Back to Hosts</a>
         </body></html>"""
         return html
@@ -866,42 +872,186 @@ def db_purge_bad_pins():
 @app.route("/admin/fix-pin-constraint", methods=["POST"])
 @admin_required
 def fix_pin_constraint():
-    """One-time fix: rebuild the host_pin UNIQUE index."""
+    """One-time fix: drop and rebuild the host_pin UNIQUE constraint cleanly."""
     from data.server_db import get_connection
     try:
         conn = get_connection()
         cur  = conn.cursor()
-        # Drop all existing unique constraints/indexes on host_pin
+
+        # Step 1: drop ALL unique constraints on residents table
+        # Must drop the CONSTRAINT (not the index) — Postgres owns the index
         cur.execute("""
-            SELECT indexname FROM pg_indexes
-            WHERE tablename = 'residents'
-            AND indexdef ILIKE '%host_pin%'
-        """)
-        indexes = [r["indexname"] for r in cur.fetchall()]
-        for idx in indexes:
-            cur.execute(f'DROP INDEX IF EXISTS "{idx}"')
-        # Also drop any named constraints
-        cur.execute("""
-            SELECT constraint_name FROM information_schema.table_constraints
+            SELECT constraint_name
+            FROM information_schema.table_constraints
             WHERE table_name = 'residents'
-            AND constraint_type = 'UNIQUE'
+              AND table_schema = 'public'
+              AND constraint_type = 'UNIQUE'
         """)
         constraints = [r["constraint_name"] for r in cur.fetchall()]
         for c in constraints:
-            try:
-                cur.execute(f'ALTER TABLE residents DROP CONSTRAINT IF EXISTS "{c}"')
-            except Exception:
-                conn.rollback()
-        # Recreate clean
-        cur.execute("ALTER TABLE residents ADD CONSTRAINT residents_host_pin_key UNIQUE (host_pin)")
+            cur.execute(f'ALTER TABLE residents DROP CONSTRAINT "{c}" CASCADE')
+
+        # Step 2: also drop any orphan indexes that survived
+        cur.execute("""
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'residents'
+              AND schemaname = 'public'
+              AND indexdef ILIKE '%host_pin%'
+        """)
+        for r in cur.fetchall():
+            cur.execute(f'DROP INDEX IF EXISTS "{r["indexname"]}" CASCADE')
+
+        # Step 3: recreate the constraint fresh
+        cur.execute("""
+            ALTER TABLE residents
+            ADD CONSTRAINT residents_host_pin_key UNIQUE (host_pin)
+        """)
+
         conn.commit()
         cur.close()
         conn.close()
-        flash(f"PIN constraint rebuilt (dropped: {indexes+constraints}). Try adding a host now.", "success")
-        _audit("FIX_PIN_CONSTRAINT", details=f"Rebuilt UNIQUE index on host_pin")
+        flash(f"PIN constraint rebuilt cleanly. You can now add hosts.", "success")
+        _audit("FIX_PIN_CONSTRAINT", details=f"Dropped {constraints} and rebuilt UNIQUE(host_pin)")
     except Exception as e:
+        import traceback
         flash(f"Fix failed: {e}", "error")
+        print(traceback.format_exc())
     return redirect(url_for("manage_hosts"))
+
+
+@app.route("/admin/full-reset-and-seed", methods=["POST"])
+@admin_required
+def full_reset_and_seed():
+    """
+    Wipes ALL visit data + hosts, then seeds realistic demo data:
+    - 6 hosts (mix of office and residential)
+    - 20 completed visits spread across the last 7 days
+    - 3 active (currently on premises) visits
+    """
+    from data.server_db import get_connection
+    import uuid as _uuid
+    from datetime import datetime, timezone, timedelta, date
+    import random
+
+    EAT = timezone(timedelta(hours=3))
+
+    def eat_str(dt):
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+
+        # ── WIPE ──────────────────────────────────────────────────────────
+        cur.execute("DELETE FROM associated_passengers")
+        cur.execute("DELETE FROM visit_logs")
+        cur.execute("DELETE FROM visitors")
+        cur.execute("DELETE FROM residents")
+
+        # ── SEED HOSTS ────────────────────────────────────────────────────
+        hosts = [
+            ("Dr. James Mwangi",    "A-101", "residential", "1234", "0712000001", None),
+            ("Prof. Grace Otieno",  "A-102", "residential", "5678", "0712000002", None),
+            ("Mr. Peter Kamau",     "B-201", "residential", "2468", "0712000003", None),
+            ("Acme Technologies",   "Suite 301", "office",  "9999", "0700100001", None),
+            ("Nairobi Consultants", "Suite 402", "office",  "7777", "0700100002", None),
+            ("HR Department",       "Suite 101", "office",  "4321", "0700100003", None),
+        ]
+        host_units = []
+        for (name, unit, htype, pin, phone, email) in hosts:
+            cur.execute("""
+                INSERT INTO residents (full_name, unit_number, host_type, host_pin, phone, host_email, is_active)
+                VALUES (%s,%s,%s,%s,%s,%s,TRUE)
+            """, (name, unit, htype, pin, phone, email))
+            host_units.append(unit)
+
+        # ── SEED COMPLETED VISITS ─────────────────────────────────────────
+        first_names = ["Alice","Brian","Carol","David","Eve","Frank","Grace",
+                       "Henry","Iris","James","Karen","Leo","Mary","Noel",
+                       "Olivia","Paul","Queen","Robert","Sarah","Tom"]
+        last_names  = ["Kimani","Ochieng","Waweru","Muthoni","Otieno","Kariuki",
+                       "Njoroge","Achieng","Mugo","Wanjiku"]
+        categories  = ["Guest","Guest","Guest","Delivery","Maintenance","Guest"]
+        reasons     = ["Job interview","Package delivery","Social visit",
+                       "Meeting","Equipment check","Parcel pickup",
+                       "Client visit","Maintenance work","Personal visit",""]
+        guards      = [1]  # admin guard_id
+
+        now = datetime.now(EAT).replace(tzinfo=None)
+
+        completed_visits = []
+        for i, fname in enumerate(first_names):
+            lname = random.choice(last_names)
+            full_name = f"{fname} {lname}"
+            nid = str(random.randint(10000000, 39999999))
+            category = random.choice(categories)
+            unit = random.choice(host_units)
+            reason = random.choice(reasons)
+
+            # spread over last 7 days
+            days_ago = random.randint(0, 6)
+            hour_in  = random.randint(7, 16)
+            min_in   = random.randint(0, 59)
+            duration = random.randint(10, 180)  # minutes
+
+            ci = now - timedelta(days=days_ago, hours=(now.hour - hour_in),
+                                  minutes=(now.minute - min_in))
+            # clamp to business hours roughly
+            ci = ci.replace(hour=hour_in, minute=min_in, second=0)
+            co = ci + timedelta(minutes=duration)
+
+            v_uuid = str(_uuid.uuid4())
+            l_uuid = str(_uuid.uuid4())
+
+            cur.execute("""
+                INSERT INTO visitors
+                    (local_uuid, full_name, national_id, category, exception_flag, created_at)
+                VALUES (%s,%s,%s,%s,FALSE,%s)
+            """, (v_uuid, full_name, nid, category, eat_str(ci)))
+
+            cur.execute("""
+                INSERT INTO visit_logs
+                    (local_uuid, visitor_uuid, guard_id, pax_count,
+                     check_in_time, check_out_time, checkout_guard_id,
+                     host_unit, reason_for_visit)
+                VALUES (%s,%s,1,1,%s,%s,1,%s,%s)
+            """, (l_uuid, v_uuid, eat_str(ci), eat_str(co), unit, reason or None))
+
+        # ── SEED 3 ACTIVE VISITS ──────────────────────────────────────────
+        active = [
+            ("John Doe",   "22345678", "Guest",       host_units[0], "Social visit",    45),
+            ("Mary Smith", "33456789", "Delivery",    host_units[3], "Package delivery", 8),
+            ("Ali Hassan", "44567890", "Maintenance", host_units[4], "AC repair",       30),
+        ]
+        for (name, nid, cat, unit, reason, mins_ago) in active:
+            v_uuid = str(_uuid.uuid4())
+            l_uuid = str(_uuid.uuid4())
+            ci = now - timedelta(minutes=mins_ago)
+            cur.execute("""
+                INSERT INTO visitors
+                    (local_uuid, full_name, national_id, category, exception_flag, created_at)
+                VALUES (%s,%s,%s,%s,FALSE,%s)
+            """, (v_uuid, name, nid, cat, eat_str(ci)))
+            cur.execute("""
+                INSERT INTO visit_logs
+                    (local_uuid, visitor_uuid, guard_id, pax_count,
+                     check_in_time, host_unit, reason_for_visit)
+                VALUES (%s,%s,1,1,%s,%s,%s)
+            """, (l_uuid, v_uuid, eat_str(ci), unit, reason))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        _audit("FULL_RESET_AND_SEED", details="Wiped all data and seeded 6 hosts, 20 visits, 3 active")
+        flash("✅ Reset complete — 6 hosts, 20 completed visits, and 3 active visitors seeded.", "success")
+
+    except Exception as e:
+        import traceback
+        flash(f"Seed failed: {e}", "error")
+        print(traceback.format_exc())
+
+    return redirect(url_for("dashboard"))
 
 # ── DB RESET (admin only) ─────────────────────────────────────────────────
 
