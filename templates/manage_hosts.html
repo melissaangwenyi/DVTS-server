@@ -144,8 +144,9 @@
                         <option value="office">🏢 Office</option>
                     </select>
 
-                    <label>Notification email</label>
-                    <input type="email" name="host_email" placeholder="optional">
+                    <!-- Email field hidden — SMTP requires paid hosting.
+                         Feature is fully implemented in backend. -->
+                    <input type="hidden" name="host_email" value="">
 
                     <label>Host PIN *</label>
                     <input type="text" name="host_pin" required placeholder="Unique PIN for zero-trust entry">
