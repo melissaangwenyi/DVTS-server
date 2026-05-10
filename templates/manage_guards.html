@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VTS — Manage Guards</title>
+    <title>VTS — Guards</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,9 +21,8 @@
         </div>
     </div>
     <div class="topbar-right">
-        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-            <span class="icon-moon">🌙</span>
-            <span class="icon-sun">☀</span>
+        <button class="theme-toggle" aria-label="Toggle dark mode">
+            <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
@@ -46,13 +45,12 @@
 <div class="content">
     <div class="admin-grid">
 
-        <!-- LEFT: GUARDS TABLE -->
         <div class="card">
             <div class="card-header">
-                <h2>👮 Current guards</h2>
+                <h2>👮 Guards</h2>
                 <span class="badge badge-status-active">{{ guards|length }} total</span>
             </div>
-            <div class="table-wrap" style="border: none; border-radius: 0;">
+            <div class="table-wrap" style="border:none;border-radius:0;">
                 {% if guards %}
                 <table>
                     <thead>
@@ -61,18 +59,16 @@
                             <th>Full name</th>
                             <th>Role</th>
                             <th>Status</th>
-                            <th>Action</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for guard in guards %}
                         {% set is_self = guard.guard_id == session.get('guard_id') %}
                         <tr class="{{ 'self-row' if is_self else '' }}">
-                            <td style="font-weight: 500;">
+                            <td style="font-weight:500;">
                                 {{ guard.username }}
-                                {% if is_self %}
-                                <span class="badge badge-status-active" style="margin-left: 6px;">You</span>
-                                {% endif %}
+                                {% if is_self %}<span class="badge badge-status-active" style="margin-left:6px;">You</span>{% endif %}
                             </td>
                             <td>{{ guard.full_name }}</td>
                             <td>
@@ -89,27 +85,26 @@
                                 <span class="badge badge-status-inactive">○ Inactive</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td style="display:flex;gap:6px;flex-wrap:wrap;">
                                 {% if is_self %}
-                                <button class="btn btn-sm btn-secondary disabled"
-                                        disabled
-                                        title="You can't toggle your own account.">
-                                    🔒 Locked
-                                </button>
+                                <button class="btn btn-sm btn-secondary disabled" disabled title="Cannot modify your own account">🔒 Locked</button>
                                 {% else %}
-                                <form action="/manage-guards/toggle/{{ guard.guard_id }}"
-                                      method="POST"
-                                      style="display:inline;"
-                                      onsubmit="return confirm('{% if guard.is_active %}Deactivate{% else %}Activate{% endif %} {{ guard.username }}?');">
-                                    <button type="submit" class="btn btn-sm btn-secondary">Toggle</button>
+                                <form action="/manage-guards/toggle/{{ guard.guard_id }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-sm btn-secondary">
+                                        {{ 'Deactivate' if guard.is_active else 'Activate' }}
+                                    </button>
                                 </form>
                                 {% endif %}
-                                <button type="button"
-                                        class="btn btn-sm btn-secondary reset-pw-btn"
-                                        style="margin-left:4px;"
-                                        data-id="{{ guard.guard_id }}"
-                                        data-username="{{ guard.username }}">
+                                <button type="button" class="btn btn-sm btn-secondary reset-pw-btn"
+                                        data-id="{{ guard.guard_id }}" data-username="{{ guard.username }}">
                                     🔑 Reset PW
+                                </button>
+                                <button type="button" class="btn btn-sm btn-secondary edit-guard-btn"
+                                        data-id="{{ guard.guard_id }}"
+                                        data-username="{{ guard.username }}"
+                                        data-fullname="{{ guard.full_name }}"
+                                        data-role="{{ guard.role }}">
+                                    ✏️ Edit
                                 </button>
                             </td>
                         </tr>
@@ -117,28 +112,32 @@
                     </tbody>
                 </table>
                 {% else %}
-                <div class="no-data">
-                    <span class="icon">👮</span>
-                    No guards registered yet.
-                </div>
+                <div class="no-data"><span class="icon">👮</span>No guards yet.</div>
                 {% endif %}
             </div>
         </div>
 
-        <!-- RIGHT: ADD GUARD FORM -->
         <div class="card">
             <div class="card-header"><h2>➕ Add guard</h2></div>
             <div class="card-body">
-                <form method="POST" action="/manage-guards/add" autocomplete="off">
+                <form method="POST" action="/manage-guards/add" autocomplete="off" id="addGuardForm">
                     <label>Username *</label>
-                    <input type="text" name="username" required autocomplete="off">
+                    <input type="text" name="username" id="ag_username" required
+                           placeholder="Letters and numbers only"
+                           oninput="enforceUsername(this)">
+                    <div class="field-error" id="ag_username_err">Letters and numbers only, no spaces.</div>
 
                     <label>Full name *</label>
-                    <input type="text" name="full_name" required autocomplete="off">
+                    <input type="text" name="full_name" id="ag_fullname" required
+                           placeholder="e.g. Jane Kamau"
+                           oninput="enforceLetters(this, 'ag_fullname_err')">
+                    <div class="field-error" id="ag_fullname_err">Letters and spaces only.</div>
 
                     <label>Password *</label>
-                    <input type="password" name="password" required minlength="6"
-                           placeholder="At least 6 characters" autocomplete="new-password">
+                    <input type="password" name="password" id="ag_password" required
+                           minlength="6" placeholder="Minimum 6 characters"
+                           oninput="checkPasswordLength(this, 'ag_pw_err')">
+                    <div class="field-error" id="ag_pw_err">Password must be at least 6 characters.</div>
 
                     <label>Role *</label>
                     <select name="role">
@@ -149,83 +148,121 @@
                     <button type="submit" class="btn">➕ Add guard</button>
                 </form>
 
-                <div class="info-note" style="margin-top: 18px;">
+                <div class="info-note" style="margin-top:18px;">
                     <span>🔐</span>
-                    <span>Security: you cannot disable your own account. Have another admin do it for you if needed.</span>
+                    <span>You cannot deactivate your own account. Ask another admin.</span>
                 </div>
             </div>
         </div>
 
     </div>
 </div>
-<!-- PASSWORD RESET MODAL -->
-<div id="reset-modal" style="
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45);
-    z-index:1000; align-items:center; justify-content:center;">
-    <div style="
-        background:var(--surface); border:1px solid var(--border);
-        border-radius:var(--radius-lg); padding:28px 28px 24px;
-        width:100%; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.15);">
+
+<!-- EDIT GUARD MODAL -->
+<div id="edit-guard-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">✏️ Edit guard</h3>
+        <p id="edit-guard-subtitle" style="font-size:12px;color:var(--text-muted);margin-bottom:18px;"></p>
+        <form id="edit-guard-form" method="POST">
+            <label>Username *</label>
+            <input type="text" name="username" id="eg_username" required placeholder="Letters and numbers only" oninput="enforceUsername(this)">
+            <label>Full name *</label>
+            <input type="text" name="full_name" id="eg_fullname" required placeholder="e.g. Jane Kamau" oninput="enforceLetters(this, null)">
+            <label>Role *</label>
+            <select name="role" id="eg_role">
+                <option value="guard">Guard</option>
+                <option value="admin">Admin</option>
+            </select>
+            <div style="display:flex;gap:10px;margin-top:8px;">
+                <button type="submit" class="btn" style="flex:1;">Save changes</button>
+                <button type="button" class="btn btn-secondary" style="flex:1;" onclick="closeModal('edit-guard-modal')">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- RESET PASSWORD MODAL -->
+<div id="reset-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
         <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">🔑 Reset password</h3>
         <p id="reset-subtitle" style="font-size:12px;color:var(--text-muted);margin-bottom:18px;"></p>
         <form id="reset-form" method="POST">
             <label>New password *</label>
-            <input type="password" name="new_password" id="new_password"
-                   required minlength="6" placeholder="At least 6 characters"
-                   autocomplete="new-password">
+            <input type="password" name="new_password" id="new_password" required minlength="6"
+                   placeholder="At least 6 characters" oninput="checkPasswordLength(this, 'reset_pw_err')">
+            <div class="field-error" id="reset_pw_err">Password must be at least 6 characters.</div>
             <label style="margin-top:4px;">Confirm password *</label>
-            <input type="password" id="confirm_password"
-                   required minlength="6" placeholder="Repeat password"
-                   autocomplete="new-password">
-            <div id="pw-match-err" style="font-size:11px;color:var(--red-strong);display:none;margin-bottom:8px;">
-                Passwords do not match.
-            </div>
+            <input type="password" id="confirm_password" required minlength="6" placeholder="Repeat password">
+            <div id="pw-match-err" style="font-size:11px;color:var(--red-strong);display:none;margin-bottom:8px;">Passwords do not match.</div>
             <div style="display:flex;gap:10px;margin-top:8px;">
-                <button type="submit" class="btn" style="flex:1;" onclick="return checkMatch()">
-                    Save password
-                </button>
-                <button type="button" class="btn btn-secondary" style="flex:1;"
-                        onclick="closeReset()">
-                    Cancel
-                </button>
+                <button type="submit" class="btn" style="flex:1;" onclick="return checkMatch()">Save</button>
+                <button type="button" class="btn btn-secondary" style="flex:1;" onclick="closeModal('reset-modal')">Cancel</button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-// Wire up Reset PW buttons via data attributes (avoids JS/Jinja quote conflicts)
+// ── MODAL HELPERS ──
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
+
 document.querySelectorAll('.reset-pw-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
-        openReset(this.dataset.id, this.dataset.username);
+        document.getElementById('reset-form').action = '/manage-guards/reset-password/' + this.dataset.id;
+        document.getElementById('reset-subtitle').textContent = 'Guard: ' + this.dataset.username;
+        document.getElementById('new_password').value = '';
+        document.getElementById('confirm_password').value = '';
+        document.getElementById('pw-match-err').style.display = 'none';
+        openModal('reset-modal');
+        setTimeout(function(){ document.getElementById('new_password').focus(); }, 100);
     });
 });
 
-function openReset(guardId, username) {
-    document.getElementById('reset-form').action = '/manage-guards/reset-password/' + guardId;
-    document.getElementById('reset-subtitle').textContent = 'Guard: ' + username;
-    document.getElementById('new_password').value = '';
-    document.getElementById('confirm_password').value = '';
-    document.getElementById('pw-match-err').style.display = 'none';
-    var modal = document.getElementById('reset-modal');
-    modal.style.display = 'flex';
-    setTimeout(function(){ document.getElementById('new_password').focus(); }, 100);
-}
-function closeReset() {
-    document.getElementById('reset-modal').style.display = 'none';
-}
+document.querySelectorAll('.edit-guard-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.getElementById('edit-guard-form').action = '/manage-guards/edit/' + this.dataset.id;
+        document.getElementById('edit-guard-subtitle').textContent = 'Editing: ' + this.dataset.username;
+        document.getElementById('eg_username').value = this.dataset.username;
+        document.getElementById('eg_fullname').value = this.dataset.fullname;
+        document.getElementById('eg_role').value = this.dataset.role;
+        openModal('edit-guard-modal');
+    });
+});
+
+// Close on backdrop
+['reset-modal','edit-guard-modal'].forEach(function(id) {
+    document.getElementById(id).addEventListener('click', function(e) {
+        if (e.target === this) closeModal(id);
+    });
+});
+
 function checkMatch() {
-    var pw  = document.getElementById('new_password').value;
+    var pw = document.getElementById('new_password').value;
     var cpw = document.getElementById('confirm_password').value;
-    if (pw !== cpw) {
-        document.getElementById('pw-match-err').style.display = 'block';
-        return false;
-    }
+    if (pw !== cpw) { document.getElementById('pw-match-err').style.display = 'block'; return false; }
     return true;
 }
-document.getElementById('reset-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeReset();
-});
+
+// ── VALIDATION ──
+function enforceUsername(input) {
+    var c = input.value.replace(/[^a-zA-Z0-9_]/g, '');
+    if (input.value !== c) { input.value = c; input.classList.add('error-field'); setTimeout(function(){ input.classList.remove('error-field'); }, 2000); }
+}
+function enforceLetters(input, errId) {
+    var c = input.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
+    if (input.value !== c) {
+        input.value = c; input.classList.add('error-field');
+        var e = errId ? document.getElementById(errId) : null;
+        if (e) e.classList.add('visible');
+        setTimeout(function(){ input.classList.remove('error-field'); if(e) e.classList.remove('visible'); }, 2500);
+    }
+}
+function checkPasswordLength(input, errId) {
+    var e = document.getElementById(errId);
+    if (input.value.length > 0 && input.value.length < 6) { e.classList.add('visible'); input.classList.add('error-field'); }
+    else { e.classList.remove('visible'); input.classList.remove('error-field'); }
+}
 </script>
 
 </body>

@@ -21,9 +21,8 @@
         </div>
     </div>
     <div class="topbar-right">
-        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-            <span class="icon-moon">🌙</span>
-            <span class="icon-sun">☀</span>
+        <button class="theme-toggle" aria-label="Toggle dark mode">
+            <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
@@ -49,11 +48,11 @@
         <div class="card">
             <div class="card-header">
                 <h2>⛔ Blacklisted visitors</h2>
-                <span class="badge badge-status-inactive" style="background: var(--red-soft); color: var(--red-strong);">
+                <span style="background:var(--red-soft);color:var(--red-strong);padding:3px 10px;border-radius:14px;font-size:12px;font-weight:500;">
                     {{ entries|length }} flagged
                 </span>
             </div>
-            <div class="table-wrap" style="border: none; border-radius: 0;">
+            <div class="table-wrap" style="border:none;border-radius:0;">
                 {% if entries %}
                 <table>
                     <thead>
@@ -62,25 +61,30 @@
                             <th>Name</th>
                             <th>Reason</th>
                             <th>Added by</th>
-                            <th>When</th>
-                            <th>Action</th>
+                            <th>Date</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for e in entries %}
                         <tr>
-                            <td><code style="background: var(--red-soft); color: var(--red-strong);">{{ e.national_id }}</code></td>
-                            <td style="font-weight: 500;">{{ e.full_name or '—' }}</td>
-                            <td style="font-style: italic; color: var(--text-muted);">{{ e.reason }}</td>
-                            <td style="font-size: 12px; color: var(--text-muted);">{{ e.added_by_name or '—' }}</td>
-                            <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">
-                                {{ e.added_at.strftime('%d %b %Y  %H:%M') if e.added_at else '—' }}
+                            <td><code style="background:var(--red-soft);color:var(--red-strong);">{{ e.national_id }}</code></td>
+                            <td style="font-weight:500;">{{ e.full_name or '—' }}</td>
+                            <td style="font-style:italic;color:var(--text-muted);">{{ e.reason }}</td>
+                            <td style="font-size:12px;color:var(--text-muted);">{{ e.added_by_name or '—' }}</td>
+                            <td style="font-size:12px;color:var(--text-muted);white-space:nowrap;">
+                                {{ e.added_at.strftime('%d %b %Y') if e.added_at else '—' }}
                             </td>
-                            <td>
-                                <form action="/blacklist/remove/{{ e.id }}"
-                                      method="POST"
-                                      style="display:inline;"
-                                      onsubmit="return confirm('Remove {{ e.national_id }} from the blacklist?');">
+                            <td style="display:flex;gap:6px;">
+                                <button type="button" class="btn btn-sm btn-secondary edit-bl-btn"
+                                        data-id="{{ e.id }}"
+                                        data-nid="{{ e.national_id }}"
+                                        data-name="{{ e.full_name or '' }}"
+                                        data-reason="{{ e.reason }}">
+                                    ✏️ Edit
+                                </button>
+                                <form action="/blacklist/remove/{{ e.id }}" method="POST"
+                                      onsubmit="return confirm('Remove {{ e.national_id }} from blacklist?');">
                                     <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
                                 </form>
                             </td>
@@ -102,31 +106,90 @@
             <div class="card-body">
                 <form method="POST" action="/blacklist/add" autocomplete="off">
                     <label>National ID *</label>
-                    <input type="text" name="national_id" required autocomplete="off"
+                    <input type="text" name="national_id" required
                            placeholder="Numbers only"
-                           oninput="this.value = this.value.replace(/\D/g, '');">
+                           oninput="enforceDigits(this, 'bl_nid_err')">
+                    <div class="field-error" id="bl_nid_err">National ID must be numbers only.</div>
 
                     <label>Visitor name (optional)</label>
-                    <input type="text" name="full_name" autocomplete="off"
-                           placeholder="Helps identify if NID gets re-used">
+                    <input type="text" name="full_name"
+                           placeholder="Helps identify the person"
+                           oninput="enforceLetters(this, null)">
 
                     <label>Reason *</label>
-                    <input type="text" name="reason" required autocomplete="off"
-                           placeholder="Why is this person being blocked?"
-                           maxlength="200">
+                    <input type="text" name="reason" required
+                           placeholder="Minimum 5 characters"
+                           minlength="5">
 
                     <button type="submit" class="btn">⛔ Add to blacklist</button>
                 </form>
 
-                <div class="info-note" style="margin-top: 18px;">
+                <div class="info-note" style="margin-top:18px;">
                     <span>🔐</span>
-                    <span>When a blacklisted visitor tries to check in, their entry is blocked. An admin can override the block, but every override is recorded in the audit log.</span>
+                    <span>When a blacklisted visitor tries to check in, entry is blocked automatically. Only admins can override — and every override is audited.</span>
                 </div>
             </div>
         </div>
 
     </div>
 </div>
+
+<!-- EDIT BLACKLIST MODAL -->
+<div id="edit-bl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">✏️ Edit blacklist entry</h3>
+        <form id="edit-bl-form" method="POST">
+            <label>National ID *</label>
+            <input type="text" name="national_id" id="ebl_nid" required
+                   oninput="enforceDigits(this, null)">
+
+            <label>Visitor name</label>
+            <input type="text" name="full_name" id="ebl_name"
+                   oninput="enforceLetters(this, null)">
+
+            <label>Reason *</label>
+            <input type="text" name="reason" id="ebl_reason" required minlength="5">
+
+            <div style="display:flex;gap:10px;margin-top:8px;">
+                <button type="submit" class="btn" style="flex:1;">Save changes</button>
+                <button type="button" class="btn btn-secondary" style="flex:1;"
+                        onclick="document.getElementById('edit-bl-modal').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.edit-bl-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.getElementById('edit-bl-form').action = '/blacklist/edit/' + this.dataset.id;
+        document.getElementById('ebl_nid').value    = this.dataset.nid;
+        document.getElementById('ebl_name').value   = this.dataset.name;
+        document.getElementById('ebl_reason').value = this.dataset.reason;
+        document.getElementById('edit-bl-modal').style.display = 'flex';
+    });
+});
+document.getElementById('edit-bl-modal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
+
+function enforceDigits(input, errId) {
+    var c = input.value.replace(/\D/g, '');
+    if (input.value !== c) {
+        input.value = c; input.classList.add('error-field');
+        var e = errId ? document.getElementById(errId) : null;
+        if (e) e.classList.add('visible');
+        setTimeout(function(){ input.classList.remove('error-field'); if(e) e.classList.remove('visible'); }, 2500);
+    }
+}
+function enforceLetters(input, errId) {
+    var c = input.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
+    if (input.value !== c) {
+        input.value = c; input.classList.add('error-field');
+        setTimeout(function(){ input.classList.remove('error-field'); }, 2500);
+    }
+}
+</script>
 
 </body>
 </html>

@@ -9,6 +9,79 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+        .audit-filter-bar {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+        }
+        .audit-filter-bar .fb-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            min-width: 150px;
+        }
+        .audit-filter-bar label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-faint);
+            margin: 0;
+        }
+        .audit-filter-bar input { margin: 0; padding: 8px 10px; font-size: 13px; }
+
+        /* Audit table specific */
+        .audit-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            overflow-x: auto;
+        }
+        .audit-wrap table { min-width: 600px; }
+
+        /* When column — date on top, time smaller below */
+        .when-cell { line-height: 1.3; }
+        .when-date { font-size: 13px; font-weight: 500; color: var(--text); }
+        .when-time { font-size: 11px; color: var(--text-muted); }
+
+        /* IP — compact */
+        .ip-cell {
+            font-size: 10px;
+            color: var(--text-faint);
+            font-family: monospace;
+            max-width: 80px;
+            word-break: break-all;
+        }
+
+        /* Details — wide, wraps naturally */
+        .details-cell {
+            font-size: 12px;
+            color: var(--text-muted);
+            max-width: 300px;
+            word-break: break-word;
+            line-height: 1.5;
+        }
+
+        .audit-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--surface-alt);
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+    </style>
 </head>
 <body>
 
@@ -21,9 +94,8 @@
         </div>
     </div>
     <div class="topbar-right">
-        <button class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-            <span class="icon-moon">🌙</span>
-            <span class="icon-sun">☀</span>
+        <button class="theme-toggle" aria-label="Toggle dark mode">
+            <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
         <span class="guard-pill">👮 {{ session.guard_name }}</span>
         <a href="/logout" class="logout">🔒 Logout</a>
@@ -40,80 +112,90 @@
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+    {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
 {% endwith %}
 
 <div class="content">
 
-    <form method="GET" action="/audit-log">
-        <div class="filters">
-            <div class="field">
+    <!-- FILTER BAR — auto-submits -->
+    <form method="GET" action="/audit-log" id="auditFilterForm">
+        <div class="audit-filter-bar">
+            <div class="fb-field">
                 <label>Action contains</label>
-                <input type="text" name="action" value="{{ action_filter }}"
-                       placeholder="e.g. CHECK_IN, LOGIN, BLACKLIST">
+                <input type="text" name="action"
+                       value="{{ action_filter }}"
+                       placeholder="e.g. CHECK_IN, LOGIN"
+                       onchange="document.getElementById('auditFilterForm').submit()">
             </div>
-            <div class="field">
-                <label>Actor (guard) contains</label>
-                <input type="text" name="actor" value="{{ actor_filter }}"
-                       placeholder="e.g. Admin">
+            <div class="fb-field">
+                <label>Guard name contains</label>
+                <input type="text" name="actor"
+                       value="{{ actor_filter }}"
+                       placeholder="e.g. Admin"
+                       onchange="document.getElementById('auditFilterForm').submit()">
             </div>
-            <div class="actions">
-                <button type="submit" class="btn">🔍 Filter</button>
-                <a href="/audit-log" class="btn-secondary btn">Clear</a>
-            </div>
+            {% if action_filter or actor_filter %}
+            <a href="/audit-log" class="btn btn-secondary" style="width:auto;padding:8px 16px;align-self:flex-end;">Clear</a>
+            {% endif %}
         </div>
     </form>
 
-    <div class="table-wrap">
+    <div class="audit-wrap">
         {% if entries %}
-        <table class="audit-table">
+        <table>
             <thead>
                 <tr>
-                    <th>When</th>
+                    <th style="min-width:90px;">When</th>
                     <th>Actor</th>
                     <th>Action</th>
                     <th>Target</th>
-                    <th>Details</th>
+                    <th style="min-width:200px;">Details</th>
                     <th>IP</th>
                 </tr>
             </thead>
             <tbody>
                 {% for e in entries %}
                 <tr>
-                    <td style="white-space: nowrap; color: var(--text-muted);">
-                        {{ e.occurred_at.strftime('%d %b %Y  %H:%M:%S') if e.occurred_at else '—' }}
-                    </td>
-                    <td style="font-weight: 500;">{{ e.actor_name or '—' }}</td>
                     <td>
-                        {% set act_lower = e.action|lower %}
-                        {% if 'login_failed' in act_lower or 'denied' in act_lower or 'blocked' in act_lower %}
+                        <div class="when-cell">
+                            <div class="when-date">
+                                {{ e.occurred_at.strftime('%d %b %Y') if e.occurred_at else '—' }}
+                            </div>
+                            <div class="when-time">
+                                {{ e.occurred_at.strftime('%H:%M:%S') if e.occurred_at else '' }}
+                            </div>
+                        </div>
+                    </td>
+                    <td style="font-weight:500;font-size:13px;">{{ e.actor_name or '—' }}</td>
+                    <td>
+                        {% set act = e.action|lower %}
+                        {% if 'login_failed' in act or 'denied' in act or 'blocked' in act %}
                             <span class="audit-action action-fail">{{ e.action }}</span>
-                        {% elif 'login' in act_lower %}
+                        {% elif 'login' in act %}
                             <span class="audit-action action-login">{{ e.action }}</span>
-                        {% elif 'check_in' in act_lower %}
+                        {% elif 'check_in' in act %}
                             <span class="audit-action action-checkin">{{ e.action }}</span>
-                        {% elif 'check_out' in act_lower %}
+                        {% elif 'check_out' in act %}
                             <span class="audit-action action-checkout">{{ e.action }}</span>
-                        {% elif 'blacklist' in act_lower %}
+                        {% elif 'blacklist' in act %}
                             <span class="audit-action action-block">{{ e.action }}</span>
-                        {% elif 'add' in act_lower or 'edit' in act_lower or 'toggle' in act_lower or 'reset' in act_lower or 'override' in act_lower %}
-                            <span class="audit-action action-edit">{{ e.action }}</span>
                         {% else %}
-                            <span class="audit-action">{{ e.action }}</span>
+                            <span class="audit-action action-edit">{{ e.action }}</span>
                         {% endif %}
                     </td>
-                    <td style="color: var(--text-muted); font-size: 11px;">{{ e.target or '—' }}</td>
-                    <td style="font-family: 'Inter', sans-serif; font-size: 12px; max-width: 320px; word-break: break-word;">
-                        {{ e.details or '—' }}
-                    </td>
-                    <td style="color: var(--text-faint); font-size: 11px; white-space: nowrap;">
-                        {{ e.ip_address or '—' }}
-                    </td>
+                    <td style="font-size:11px;color:var(--text-muted);max-width:100px;word-break:break-all;">{{ e.target or '—' }}</td>
+                    <td class="details-cell">{{ e.details or '—' }}</td>
+                    <td class="ip-cell">{{ e.ip_address or '—' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        <div class="record-count">{{ entries|length }} action(s) shown · most recent first · last 300 actions max</div>
+        <div class="audit-footer">
+            <span>{{ entries|length }} action(s)</span>
+            <span>Most recent first · last 300 max</span>
+        </div>
         {% else %}
         <div class="no-data">
             <span class="icon">📜</span>

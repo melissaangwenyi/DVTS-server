@@ -304,6 +304,9 @@ def checkin():
     if not host_unit:
         flash("Please select a unit or office for this visit.", "error")
         return redirect(url_for("dashboard"))
+    if not reason:
+        flash("Reason for visit is required.", "error")
+        return redirect(url_for("dashboard"))
     if not no_id and not national_id:
         flash("National ID is required (or tick 'Visitor has NO ID').", "error")
         return redirect(url_for("dashboard"))
@@ -1129,6 +1132,120 @@ def reset_visits():
         flash("Clear failed — check logs.", "error")
     return redirect(url_for("dashboard"))
 
+
+
+# ── EDIT GUARD (admin) ────────────────────────────────────────────────────
+
+@app.route("/manage-guards/edit/<int:guard_id>", methods=["POST"])
+@admin_required
+def edit_guard(guard_id):
+    username  = request.form.get("username",  "").strip()
+    full_name = request.form.get("full_name", "").strip()
+    role      = request.form.get("role",      "guard").strip()
+
+    if not username or not full_name:
+        flash("Username and full name are required.", "error")
+        return redirect(url_for("manage_guards"))
+
+    from data.server_db import get_connection
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "UPDATE guards SET username=%s, full_name=%s, role=%s WHERE guard_id=%s",
+            (username, full_name, role, guard_id)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f"Guard updated successfully.", "success")
+        _audit("GUARD_EDIT", target=str(guard_id),
+               details=f"username={username}, full_name={full_name}, role={role}")
+    except Exception as e:
+        flash(f"Update failed: {e}", "error")
+    return redirect(url_for("manage_guards"))
+
+
+# ── EDIT BLACKLIST ENTRY (admin) ──────────────────────────────────────────
+
+@app.route("/blacklist/edit/<int:bl_id>", methods=["POST"])
+@admin_required
+def blacklist_edit(bl_id):
+    national_id = request.form.get("national_id", "").strip()
+    full_name   = request.form.get("full_name",   "").strip()
+    reason      = request.form.get("reason",      "").strip()
+
+    if not national_id or not reason:
+        flash("National ID and reason are required.", "error")
+        return redirect(url_for("blacklist"))
+
+    from data.server_db import get_connection
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "UPDATE blacklist SET national_id=%s, full_name=%s, reason=%s WHERE id=%s",
+            (national_id, full_name, reason, bl_id)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash("Blacklist entry updated.", "success")
+        _audit("BLACKLIST_EDIT", target=f"NID:{national_id}",
+               details=f"reason: {reason}")
+    except Exception as e:
+        flash(f"Update failed: {e}", "error")
+    return redirect(url_for("blacklist"))
+
+
+# ── EDIT ACTIVE VISIT (admin only) ───────────────────────────────────────
+
+@app.route("/visit/edit/<log_uuid>", methods=["POST"])
+@admin_required
+def edit_visit(log_uuid):
+    """Admin can correct visitor details on active (not yet checked out) visits."""
+    full_name   = request.form.get("full_name",   "").strip()
+    national_id = request.form.get("national_id", "").strip()
+    reason      = request.form.get("reason",      "").strip()
+    host_unit   = request.form.get("host_unit",   "").strip()
+
+    if not full_name:
+        flash("Full name is required.", "error")
+        return redirect(url_for("dashboard"))
+
+    from data.server_db import get_connection
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        # Get visitor_uuid for this log
+        cur.execute("SELECT visitor_uuid FROM visit_logs WHERE local_uuid=%s", (log_uuid,))
+        row = cur.fetchone()
+        if not row:
+            flash("Visit not found.", "error")
+            cur.close(); conn.close()
+            return redirect(url_for("dashboard"))
+
+        visitor_uuid = row["visitor_uuid"]
+
+        # Update visitor details
+        cur.execute(
+            "UPDATE visitors SET full_name=%s, national_id=%s WHERE local_uuid=%s",
+            (full_name, national_id or None, visitor_uuid)
+        )
+        # Update visit log details
+        cur.execute(
+            "UPDATE visit_logs SET reason_for_visit=%s, host_unit=%s WHERE local_uuid=%s",
+            (reason or None, host_unit or None, log_uuid)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f"Visit record corrected.", "success")
+        _audit("VISIT_EDIT", target=log_uuid,
+               details=f"Admin corrected: {full_name}, NID={national_id}, unit={host_unit}")
+    except Exception as e:
+        flash(f"Edit failed: {e}", "error")
+    return redirect(url_for("dashboard"))
 
 # ── STARTUP ───────────────────────────────────────────────────────────────
 

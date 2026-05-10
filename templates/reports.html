@@ -9,6 +9,122 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+        /* ── REPORTS-SPECIFIC STYLES ── */
+        .reports-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .reports-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .reports-meta {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* Inline stat pills — not cards */
+        .stat-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+        .stat-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .stat-pill .pill-value {
+            font-weight: 700;
+            font-size: 15px;
+        }
+        .stat-pill.teal   { background: var(--teal-soft);  border-color: #B8E5D6; color: var(--teal-deep); }
+        .stat-pill.amber  { background: var(--amber-soft); border-color: #F0D9A8; color: var(--amber-strong); }
+        .stat-pill.blue   { background: var(--blue-soft);  border-color: #C8DEF4; color: var(--blue-strong); }
+        .stat-pill.green  { background: var(--green-soft); border-color: #C8DDA8; color: var(--green-strong); }
+
+        /* Compact filter bar */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: flex-end;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+        }
+        .filter-bar .fb-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            min-width: 120px;
+        }
+        .filter-bar label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-faint);
+            margin: 0;
+        }
+        .filter-bar select,
+        .filter-bar input {
+            margin: 0;
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+        .filter-bar .fb-actions {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        /* Clean table */
+        .reports-table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            overflow-x: auto;
+        }
+        .reports-table-wrap table {
+            min-width: 700px;
+        }
+        .empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .empty-state .es-icon { font-size: 40px; display: block; margin-bottom: 10px; opacity: .35; }
+        .empty-state .es-text { font-size: 14px; }
+
+        .tbl-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--surface-alt);
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+    </style>
 </head>
 <body>
 
@@ -48,40 +164,31 @@
 
 <div class="content">
 
-    <!-- STATS -->
-    <div class="stats-row">
-        <div class="stat-card">
-            <div class="value">{{ stats.total }}</div>
-            <div class="label">Total</div>
+    <!-- HEADER + STATS -->
+    <div class="reports-header">
+        <div>
+            <div class="reports-title">Visit Reports</div>
+            <div class="reports-meta">{{ history|length }} record(s) shown</div>
         </div>
-        <div class="stat-card tinted-teal">
-            <div class="value">{{ stats.today }}</div>
-            <div class="label">Today</div>
-        </div>
-        <div class="stat-card tinted-amber">
-            <div class="value">{{ stats.active }}</div>
-            <div class="label">Active</div>
-        </div>
-        <div class="stat-card tinted-blue">
-            <div class="value">{{ stats.by_category.get('Guest', 0) }}</div>
-            <div class="label">Guests</div>
-        </div>
-        <div class="stat-card tinted-amber">
-            <div class="value">{{ stats.by_category.get('Delivery', 0) }}</div>
-            <div class="label">Deliveries</div>
-        </div>
-        <div class="stat-card tinted-green">
-            <div class="value">{{ stats.by_category.get('Maintenance', 0) }}</div>
-            <div class="label">Maintenance</div>
-        </div>
+        <a href="{{ url_for('reports_export_csv', **request.args) }}" class="export-link">⬇ Export CSV</a>
     </div>
 
-    <!-- FILTERS -->
-    <form method="GET" action="/reports">
-        <div class="filters">
-            <div class="field">
+    <!-- STAT PILLS -->
+    <div class="stat-pills">
+        <span class="stat-pill"><span class="pill-value">{{ stats.total }}</span> total visits</span>
+        <span class="stat-pill teal"><span class="pill-value">{{ stats.today }}</span> today</span>
+        <span class="stat-pill amber"><span class="pill-value">{{ stats.active }}</span> active now</span>
+        <span class="stat-pill blue"><span class="pill-value">{{ stats.by_category.get('Guest', 0) }}</span> guests</span>
+        <span class="stat-pill amber"><span class="pill-value">{{ stats.by_category.get('Delivery', 0) }}</span> deliveries</span>
+        <span class="stat-pill green"><span class="pill-value">{{ stats.by_category.get('Maintenance', 0) }}</span> maintenance</span>
+    </div>
+
+    <!-- FILTER BAR — auto-submits on change -->
+    <form method="GET" action="/reports" id="filterForm">
+        <div class="filter-bar">
+            <div class="fb-field">
                 <label>Category</label>
-                <select name="category">
+                <select name="category" onchange="document.getElementById('filterForm').submit()">
                     <option value="">All</option>
                     <option value="Guest"       {{ 'selected' if request.args.get('category')=='Guest' }}>Guest</option>
                     <option value="Delivery"    {{ 'selected' if request.args.get('category')=='Delivery' }}>Delivery</option>
@@ -89,41 +196,49 @@
                     <option value="Other"       {{ 'selected' if request.args.get('category')=='Other' }}>Other</option>
                 </select>
             </div>
-            <div class="field">
+            <div class="fb-field">
                 <label>Unit / office</label>
-                <select name="host_unit">
+                <select name="host_unit" onchange="document.getElementById('filterForm').submit()">
                     <option value="">All units</option>
                     {% for u in units %}
                     <option value="{{ u }}" {{ 'selected' if request.args.get('host_unit')==u }}>{{ u }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="field">
+            <div class="fb-field">
                 <label>Date from</label>
-                <input type="date" name="date_from" value="{{ request.args.get('date_from','') }}">
+                <input type="date" name="date_from"
+                       value="{{ request.args.get('date_from','') }}"
+                       onchange="document.getElementById('filterForm').submit()">
             </div>
-            <div class="field">
+            <div class="fb-field">
                 <label>Date to</label>
-                <input type="date" name="date_to" value="{{ request.args.get('date_to','') }}">
+                <input type="date" name="date_to"
+                       value="{{ request.args.get('date_to','') }}"
+                       onchange="document.getElementById('filterForm').submit()">
             </div>
-            <div class="field">
+            <div class="fb-field">
                 <label>Time from</label>
-                <input type="time" name="time_from" value="{{ request.args.get('time_from','') }}">
+                <input type="time" name="time_from"
+                       value="{{ request.args.get('time_from','') }}"
+                       onchange="document.getElementById('filterForm').submit()">
             </div>
-            <div class="field">
+            <div class="fb-field">
                 <label>Time to</label>
-                <input type="time" name="time_to" value="{{ request.args.get('time_to','') }}">
+                <input type="time" name="time_to"
+                       value="{{ request.args.get('time_to','') }}"
+                       onchange="document.getElementById('filterForm').submit()">
             </div>
-            <div class="actions">
-                <button type="submit" class="btn">Filter</button>
-                <a href="/reports" class="btn-secondary btn">Clear</a>
-                <a href="{{ url_for('reports_export_csv', **request.args) }}" class="export-link">⬇ CSV</a>
+            <div class="fb-actions">
+                {% if request.args %}
+                <a href="/reports" class="btn btn-secondary" style="width:auto;padding:8px 16px;">Clear</a>
+                {% endif %}
             </div>
         </div>
     </form>
 
     <!-- TABLE -->
-    <div class="table-wrap">
+    <div class="reports-table-wrap">
         {% if history %}
         <table>
             <thead>
@@ -136,7 +251,7 @@
                     <th>Duration</th>
                     <th>In by</th>
                     <th>Out by</th>
-                    <th>Flag</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -160,8 +275,6 @@
                     <td style="font-size:11px;color:var(--text-muted);">{{ r.checkout_guard_name or '—' }}</td>
                     <td>{% if r.was_overdue %}🔴{% elif r.exception_flag %}⚠{% else %}—{% endif %}</td>
                 </tr>
-
-                {# DETAIL DRAWER #}
                 <tr id="r{{ loop.index }}" class="detail-drawer hidden">
                     <td colspan="9">
                         <div class="drawer-inner">
@@ -170,11 +283,7 @@
                                 <span class="df-value mono">{{ r.national_id or '— (no ID)' }}</span>
                             </div>
                             <div class="drawer-field">
-                                <span class="df-label">Category</span>
-                                <span class="df-value">{{ r.category }}</span>
-                            </div>
-                            <div class="drawer-field">
-                                <span class="df-label">Reason for visit</span>
+                                <span class="df-label">Reason</span>
                                 <span class="df-value muted">{{ r.reason_for_visit or '—' }}</span>
                             </div>
                             <div class="drawer-field">
@@ -197,11 +306,7 @@
                             </div>
                             <div class="drawer-field">
                                 <span class="df-label">Entry type</span>
-                                <span class="df-value">{{ '⚠ Zero-trust (no ID)' if r.exception_flag else '✓ Standard' }}</span>
-                            </div>
-                            <div class="drawer-field">
-                                <span class="df-label">Overdue</span>
-                                <span class="df-value">{{ '🔴 Yes' if r.was_overdue else '✓ No' }}</span>
+                                <span class="df-value">{{ '⚠ Zero-trust' if r.exception_flag else '✓ Standard' }}</span>
                             </div>
                         </div>
                     </td>
@@ -209,11 +314,14 @@
                 {% endfor %}
             </tbody>
         </table>
-        <div class="record-count">{{ history|length }} record(s)</div>
+        <div class="tbl-footer">
+            <span>{{ history|length }} record(s)</span>
+            <span>Completed visits only · click a row to expand details</span>
+        </div>
         {% else %}
-        <div class="no-data">
-            <span class="icon">📊</span>
-            No completed visits match the selected filters.
+        <div class="empty-state">
+            <span class="es-icon">📊</span>
+            <span class="es-text">No completed visits match the selected filters.</span>
         </div>
         {% endif %}
     </div>
@@ -227,10 +335,7 @@ function toggleDrawer(id, row) {
     var isOpen = !drawer.classList.contains('hidden');
     document.querySelectorAll('.detail-drawer').forEach(function(d){ d.classList.add('hidden'); });
     document.querySelectorAll('tr.expandable').forEach(function(r){ r.classList.remove('expanded'); });
-    if (!isOpen) {
-        drawer.classList.remove('hidden');
-        row.classList.add('expanded');
-    }
+    if (!isOpen) { drawer.classList.remove('hidden'); row.classList.add('expanded'); }
 }
 </script>
 
