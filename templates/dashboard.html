@@ -85,7 +85,7 @@
                 <div class="field-error" id="name_error">Letters only.</div>
 
                 <label>Phone</label>
-                <input type="text" name="phone_number" id="phone_number" placeholder="e.g. 0712345678"
+                <input type="text" name="phone_number" id="phone_number" placeholder="e.g. 30012345"
                        oninput="enforceDigits(this,'phone_error');">
                 <div class="field-error" id="phone_error">Numbers only.</div>
 
@@ -218,12 +218,22 @@
                     <td style="white-space:nowrap;">{{ v.entry_display }}</td>
                     <td style="white-space:nowrap;">{{ v.duration }}</td>
                     <td style="font-size:11px;color:var(--text-muted);">{{ v.checkin_guard_name or '—' }}</td>
-                    <td onclick="event.stopPropagation();">
+                    <td onclick="event.stopPropagation();" style="display:flex;gap:6px;flex-wrap:wrap;">
                         <form method="POST" action="/checkout"
                               onsubmit="return confirm('Check out {{ v.full_name }}?')">
                             <input type="hidden" name="log_uuid" value="{{ v.local_uuid }}">
                             <button type="submit" class="btn btn-sm">✓ Out</button>
                         </form>
+                        {% if session.get('role') == 'admin' %}
+                        <button type="button" class="btn btn-sm btn-secondary edit-visit-btn"
+                                data-uuid="{{ v.local_uuid }}"
+                                data-name="{{ v.full_name }}"
+                                data-nid="{{ v.national_id or '' }}"
+                                data-reason="{{ v.reason_for_visit or '' }}"
+                                data-unit="{{ v.host_unit or '' }}">
+                            ✏️
+                        </button>
+                        {% endif %}
                     </td>
                 </tr>
                 {# DETAIL DRAWER ROW #}
@@ -396,5 +406,45 @@ function buildPaxFields(count) {
 }
 </script>
 
+
+<!-- EDIT VISIT MODAL (admin only) -->
+<div id="edit-visit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">✏️ Correct visit record</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">Admin correction — this action will be audited.</p>
+        <form id="edit-visit-form" method="POST">
+            <label>Full name *</label>
+            <input type="text" name="full_name" id="ev_name" required>
+            <label>National ID</label>
+            <input type="text" name="national_id" id="ev_nid" placeholder="Numbers only"
+                   oninput="this.value=this.value.replace(/\D/g,'')">
+            <label>Unit / office</label>
+            <input type="text" name="host_unit" id="ev_unit">
+            <label>Reason for visit</label>
+            <input type="text" name="reason" id="ev_reason" maxlength="120">
+            <div style="display:flex;gap:10px;margin-top:8px;">
+                <button type="submit" class="btn" style="flex:1;">Save correction</button>
+                <button type="button" class="btn btn-secondary" style="flex:1;"
+                        onclick="document.getElementById('edit-visit-modal').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.edit-visit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.getElementById('edit-visit-form').action = '/visit/edit/' + this.dataset.uuid;
+        document.getElementById('ev_name').value   = this.dataset.name;
+        document.getElementById('ev_nid').value    = this.dataset.nid;
+        document.getElementById('ev_unit').value   = this.dataset.unit;
+        document.getElementById('ev_reason').value = this.dataset.reason;
+        document.getElementById('edit-visit-modal').style.display = 'flex';
+    });
+});
+document.getElementById('edit-visit-modal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
+</script>
 </body>
 </html>
