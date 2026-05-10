@@ -142,10 +142,16 @@ def init_server_db():
             id          SERIAL PRIMARY KEY,
             log_uuid    TEXT NOT NULL REFERENCES visit_logs(local_uuid),
             national_id TEXT NOT NULL,
+            full_name   TEXT,
             recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE (log_uuid, national_id)
         )
     """)
+    # Add full_name column if upgrading from old schema
+    try:
+        cur.execute("ALTER TABLE associated_passengers ADD COLUMN IF NOT EXISTS full_name TEXT")
+    except Exception:
+        conn.rollback()
 
     # Audit log — append-only record of every important action
     cur.execute("""
@@ -430,15 +436,15 @@ def upsert_visit(data: dict) -> bool:
         return False
 
 
-def upsert_passenger(log_uuid: str, national_id: str) -> bool:
+def upsert_passenger(log_uuid: str, national_id: str, full_name: str = None) -> bool:
     try:
         conn = get_connection()
         cur  = conn.cursor()
         cur.execute("""
-            INSERT INTO associated_passengers (log_uuid, national_id)
-            VALUES (%s, %s)
+            INSERT INTO associated_passengers (log_uuid, national_id, full_name)
+            VALUES (%s, %s, %s)
             ON CONFLICT (log_uuid, national_id) DO NOTHING
-        """, (log_uuid, national_id))
+        """, (log_uuid, national_id, full_name or None))
         conn.commit()
         cur.close()
         conn.close()
@@ -503,7 +509,11 @@ def get_active_visits_server(host_unit_filter: str = None) -> list:
                 vl.host_unit, vl.reason_for_visit,
                 v.exception_flag,
                 g_in.full_name AS checkin_guard_name,
-                COALESCE(STRING_AGG(ap.national_id, ' | '), '—') AS pax_ids
+                COALESCE(STRING_AGG(
+                CASE WHEN ap.full_name IS NOT NULL
+                     THEN ap.full_name || ' (' || ap.national_id || ')'
+                     ELSE ap.national_id
+                END, ' | '), '—') AS pax_ids
             FROM visit_logs vl
             JOIN visitors v ON v.local_uuid = vl.visitor_uuid
             LEFT JOIN associated_passengers ap ON ap.log_uuid = vl.local_uuid
@@ -548,7 +558,11 @@ def get_filtered_history(category: str = None,
                 v.exception_flag,
                 g_in.full_name  AS checkin_guard_name,
                 g_out.full_name AS checkout_guard_name,
-                COALESCE(STRING_AGG(ap.national_id, ' | '), '—') AS pax_ids,
+                COALESCE(STRING_AGG(
+                CASE WHEN ap.full_name IS NOT NULL
+                     THEN ap.full_name || ' (' || ap.national_id || ')'
+                     ELSE ap.national_id
+                END, ' | '), '—') AS pax_ids,
                 CASE
                     WHEN v.category = 'Delivery'
                      AND EXTRACT(EPOCH FROM (

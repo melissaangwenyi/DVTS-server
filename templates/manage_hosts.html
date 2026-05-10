@@ -9,6 +9,36 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+            padding: 12px 20px; border-radius: var(--radius-md);
+            font-size: 13px; font-weight: 500;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            transform: translateY(80px); opacity: 0;
+            transition: all 0.3s ease; pointer-events: none;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: var(--teal-soft); color: var(--teal-deep); border: 1px solid #B8E5D6; }
+        .toast.error   { background: var(--red-soft);  color: var(--red-strong); border: 1px solid #F4D0D0; }
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 28px;
+            width: 100%; max-width: 420px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-title  { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+        .modal-error  { font-size: 12px; color: var(--red-strong); margin-bottom: 10px; display: none; }
+        .modal-error.show { display: block; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 12px; }
+        .modal-actions .btn { flex: 1; }
+    </style>
 </head>
 <body>
 
@@ -38,47 +68,39 @@
     <a href="/audit-log">📜 Audit log</a>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
-{% endwith %}
-
 <div class="content">
     <div class="admin-grid">
 
+        <!-- HOSTS TABLE -->
         <div class="card">
             <div class="card-header">
                 <h2>🏡 Hosts</h2>
                 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                    <span class="badge badge-status-active">{{ hosts|length }} shown</span>
-                    <form action="/admin/reset-hosts" method="POST"
-                          onsubmit="return confirm('Delete ALL hosts? Cannot be undone.');">
-                        <button type="submit" class="btn btn-sm btn-danger">🗑 Reset all</button>
-                    </form>
+                    <span class="badge badge-status-active" id="host-count">{{ hosts|length }} shown</span>
+                    <button class="btn btn-sm btn-danger"
+                            onclick="if(confirm('Delete ALL hosts? This cannot be undone.')) resetAllHosts()">
+                        🗑 Reset all
+                    </button>
                 </div>
             </div>
 
-            <form method="GET" action="/manage-hosts" class="unit-filter-strip"
-                  style="margin:0;border-radius:0;border-top:none;border-left:none;border-right:none;border-bottom:1px solid var(--border);">
+            <div class="unit-filter-strip" style="margin:0;border-radius:0;border-top:none;border-left:none;border-right:none;border-bottom:1px solid var(--border);">
                 <label>Unit:</label>
-                <select name="unit" onchange="this.form.submit()">
+                <select id="unit-filter" onchange="applyFilter()">
                     <option value="">All</option>
                     {% for u in units %}
                     <option value="{{ u }}" {{ 'selected' if unit_filter==u }}>{{ u }}</option>
                     {% endfor %}
                 </select>
                 <label>Type:</label>
-                <select name="type" onchange="this.form.submit()">
+                <select id="type-filter" onchange="applyFilter()">
                     <option value="">All</option>
                     <option value="office"      {{ 'selected' if type_filter=="office" }}>Office</option>
                     <option value="residential" {{ 'selected' if type_filter=="residential" }}>Residential</option>
                 </select>
-                {% if unit_filter or type_filter %}
-                <a href="/manage-hosts" class="btn btn-sm btn-secondary">Clear</a>
-                {% endif %}
-            </form>
+            </div>
 
             <div class="table-wrap" style="border:none;border-radius:0;">
-                {% if hosts %}
                 <table>
                     <thead>
                         <tr>
@@ -91,19 +113,21 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="hosts-tbody">
                         {% for host in hosts %}
-                        <tr>
-                            <td style="font-weight:500;">{{ host.full_name }}</td>
-                            <td><code>{{ host.unit_number }}</code></td>
-                            <td>
+                        <tr id="host-row-{{ host.resident_id }}"
+                            data-unit="{{ host.unit_number }}"
+                            data-type="{{ host.host_type or 'residential' }}">
+                            <td style="font-weight:500;" class="h-name">{{ host.full_name }}</td>
+                            <td class="h-unit"><code>{{ host.unit_number }}</code></td>
+                            <td class="h-type">
                                 <span class="host-type-chip {{ host.host_type or 'residential' }}">
                                     {{ host.host_type or 'residential' }}
                                 </span>
                             </td>
-                            <td><code>{{ host.host_pin }}</code></td>
-                            <td>{{ host.phone or '—' }}</td>
-                            <td>
+                            <td class="h-pin"><code>{{ host.host_pin }}</code></td>
+                            <td class="h-phone">{{ host.phone or '—' }}</td>
+                            <td class="h-status">
                                 {% if host.is_active %}
                                 <span class="badge badge-status-active">● Active</span>
                                 {% else %}
@@ -111,159 +135,265 @@
                                 {% endif %}
                             </td>
                             <td style="display:flex;gap:6px;flex-wrap:wrap;">
-                                <form action="/manage-hosts/toggle/{{ host.resident_id }}" method="POST" style="display:inline;">
-                                    <button type="submit" class="btn btn-sm btn-secondary">
-                                        {{ 'Deactivate' if host.is_active else 'Activate' }}
-                                    </button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-secondary edit-host-btn"
+                            <td style="display:flex;gap:6px;flex-wrap:wrap;">
+                                <button class="btn btn-sm btn-secondary toggle-host-btn"
+                                        data-id="{{ host.resident_id }}"
+                                        data-active="{{ 'true' if host.is_active else 'false' }}">
+                                    {{ 'Deactivate' if host.is_active else 'Activate' }}
+                                </button>
+                                <button class="btn btn-sm btn-secondary edit-host-btn"
                                         data-id="{{ host.resident_id }}"
                                         data-fullname="{{ host.full_name }}"
                                         data-unit="{{ host.unit_number }}"
-                                        data-phone="{{ host.phone or '' }}"
                                         data-pin="{{ host.host_pin }}"
+                                        data-phone="{{ host.phone or '' }}"
                                         data-type="{{ host.host_type or 'residential' }}">
                                     ✏️ Edit
                                 </button>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                {% else %}
-                <div class="no-data">
-                    <span class="icon">🏡</span>
-                    No hosts yet — add one using the form.
-                </div>
-                {% endif %}
             </div>
         </div>
 
+        <!-- ADD HOST FORM -->
         <div class="card">
             <div class="card-header"><h2>➕ Add host</h2></div>
             <div class="card-body">
-                <form method="POST" action="/manage-hosts/add" autocomplete="off">
-                    <label>Full name *</label>
-                    <input type="text" name="full_name" required
-                           placeholder="e.g. Jane Doe / Acme Corp"
-                           oninput="enforceLetters(this, 'ah_name_err')">
-                    <div class="field-error" id="ah_name_err">Letters and spaces only.</div>
+                <div class="modal-error" id="add-host-error"></div>
 
-                    <label>Unit / office *</label>
-                    <input type="text" name="unit_number" required
-                           placeholder="e.g. A-12, Suite 301">
+                <label>Full name *</label>
+                <input type="text" id="ah_name" placeholder="e.g. Jane Doe / Acme Corp"
+                       oninput="enforceLetters(this)">
 
-                    <label>Type *</label>
-                    <select name="host_type" required>
-                        <option value="residential">🏘 Residential</option>
-                        <option value="office">🏢 Office</option>
-                    </select>
+                <label>Unit / office *</label>
+                <input type="text" id="ah_unit" placeholder="e.g. A-12, Suite 301">
 
-                    <input type="hidden" name="host_email" value="">
+                <label>Type *</label>
+                <select id="ah_type">
+                    <option value="residential">🏘 Residential</option>
+                    <option value="office">🏢 Office</option>
+                </select>
 
-                    <label>Host PIN *</label>
-                    <input type="text" name="host_pin" required
-                           placeholder="Numbers only, min 4 digits"
-                           oninput="enforcePIN(this)">
-                    <div class="field-error" id="ah_pin_err">PIN must be numbers only, minimum 4 digits.</div>
+                <label>Host PIN * (numbers only, min 4)</label>
+                <input type="text" id="ah_pin" placeholder="e.g. 1234"
+                       oninput="enforcePIN(this)">
 
-                    <label>Phone</label>
-                    <input type="text" name="phone"
-                           placeholder="e.g. 0712345678"
-                           oninput="enforceDigits(this, 'ah_phone_err')">
-                    <div class="field-error" id="ah_phone_err">Numbers only.</div>
+                <label>Phone</label>
+                <input type="text" id="ah_phone" placeholder="e.g. 0712345678"
+                       oninput="enforceDigits(this)">
 
-                    <button type="submit" class="btn">➕ Add host</button>
-                </form>
+                <button class="btn" onclick="addHost()">➕ Add host</button>
 
                 <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border);">
                     <p style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;">⚠ Danger zone</p>
-                    <form action="/admin/reset-visits" method="POST"
-                          onsubmit="return confirm('Delete ALL visit records? Cannot be undone.');">
-                        <button type="submit" class="btn btn-danger" style="font-size:12px;">
-                            🗑 Clear all visit data
-                        </button>
-                    </form>
+                    <button class="btn btn-danger" style="font-size:12px;"
+                            onclick="if(confirm('Delete ALL visit records? Cannot be undone.')) resetAllVisits()">
+                        🗑 Clear all visit data
+                    </button>
                 </div>
             </div>
         </div>
-
     </div>
 </div>
 
 <!-- EDIT HOST MODAL -->
-<div id="edit-host-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">✏️ Edit host</h3>
-        <form id="edit-host-form" method="POST">
-            <label>Full name *</label>
-            <input type="text" name="full_name" id="eh_fullname" required
-                   oninput="enforceLetters(this, null)">
-
-            <label>Unit / office *</label>
-            <input type="text" name="unit_number" id="eh_unit" required>
-
-            <label>Type *</label>
-            <select name="host_type" id="eh_type">
-                <option value="residential">🏘 Residential</option>
-                <option value="office">🏢 Office</option>
-            </select>
-
-            <label>Phone</label>
-            <input type="text" name="phone" id="eh_phone"
-                   oninput="enforceDigits(this, null)">
-
-            <input type="hidden" name="host_email" value="">
-
-            <div style="display:flex;gap:10px;margin-top:8px;">
-                <button type="submit" class="btn" style="flex:1;">Save changes</button>
-                <button type="button" class="btn btn-secondary" style="flex:1;"
-                        onclick="document.getElementById('edit-host-modal').style.display='none'">Cancel</button>
-            </div>
-        </form>
+<div class="modal-overlay" id="edit-host-modal">
+    <div class="modal-box">
+        <div class="modal-title">✏️ Edit host</div>
+        <div class="modal-error" id="edit-host-error"></div>
+        <input type="hidden" id="eh_id">
+        <label>Full name *</label>
+        <input type="text" id="eh_name" oninput="enforceLetters(this)">
+        <label>Unit / office *</label>
+        <input type="text" id="eh_unit">
+        <label>Type *</label>
+        <select id="eh_type">
+            <option value="residential">🏘 Residential</option>
+            <option value="office">🏢 Office</option>
+        </select>
+        <label>Host PIN * (numbers only, min 4)</label>
+        <input type="text" id="eh_pin" oninput="enforcePIN(this)">
+        <label>Phone</label>
+        <input type="text" id="eh_phone" oninput="enforceDigits(this)">
+        <div class="modal-actions">
+            <button class="btn" onclick="saveHostEdit()">Save changes</button>
+            <button class="btn btn-secondary" onclick="closeModal('edit-host-modal')">Cancel</button>
+        </div>
     </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-document.querySelectorAll('.edit-host-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        document.getElementById('edit-host-form').action = '/manage-hosts/edit/' + this.dataset.id;
-        document.getElementById('eh_fullname').value = this.dataset.fullname;
-        document.getElementById('eh_unit').value     = this.dataset.unit;
-        document.getElementById('eh_phone').value    = this.dataset.phone;
-        document.getElementById('eh_type').value     = this.dataset.type;
-        var modal = document.getElementById('edit-host-modal');
-        modal.style.display = 'flex';
-    });
-});
-document.getElementById('edit-host-modal').addEventListener('click', function(e) {
-    if (e.target === this) this.style.display = 'none';
+/* ── TOAST ── */
+function showToast(msg, type) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast ' + type;
+    setTimeout(function(){ t.classList.add('show'); }, 10);
+    setTimeout(function(){ t.classList.remove('show'); }, 3000);
+}
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+document.querySelectorAll('.modal-overlay').forEach(function(el) {
+    el.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 });
 
-function enforceLetters(input, errId) {
-    var c = input.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-'\/&.]/g, '');
-    if (input.value !== c) {
-        input.value = c; input.classList.add('error-field');
-        var e = errId ? document.getElementById(errId) : null;
-        if (e) e.classList.add('visible');
-        setTimeout(function(){ input.classList.remove('error-field'); if(e) e.classList.remove('visible'); }, 2500);
-    }
+/* ── CLIENT-SIDE FILTER ── */
+function applyFilter() {
+    var unit = document.getElementById('unit-filter').value.toLowerCase();
+    var type = document.getElementById('type-filter').value.toLowerCase();
+    var rows = document.querySelectorAll('#hosts-tbody tr');
+    rows.forEach(function(row) {
+        var rUnit = (row.dataset.unit || '').toLowerCase();
+        var rType = (row.dataset.type || '').toLowerCase();
+        var show  = (!unit || rUnit === unit) && (!type || rType === type);
+        row.style.display = show ? '' : 'none';
+    });
 }
-function enforceDigits(input, errId) {
-    var c = input.value.replace(/\D/g, '');
-    if (input.value !== c) {
-        input.value = c; input.classList.add('error-field');
-        var e = errId ? document.getElementById(errId) : null;
-        if (e) e.classList.add('visible');
-        setTimeout(function(){ input.classList.remove('error-field'); if(e) e.classList.remove('visible'); }, 2500);
-    }
+
+/* ── VALIDATION ── */
+function enforceLetters(el) {
+    el.value = el.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-'\/&.]/g, '');
 }
-function enforcePIN(input) {
-    var c = input.value.replace(/\D/g, '');
-    var e = document.getElementById('ah_pin_err');
-    input.value = c;
-    if (c.length > 0 && c.length < 4) { e.classList.add('visible'); input.classList.add('error-field'); }
-    else { e.classList.remove('visible'); input.classList.remove('error-field'); }
+function enforceDigits(el) { el.value = el.value.replace(/\D/g, ''); }
+function enforcePIN(el) {
+    el.value = el.value.replace(/\D/g, '');
+    el.style.borderColor = (el.value.length > 0 && el.value.length < 4) ? 'var(--red-strong)' : '';
+}
+
+/* ── EVENT DELEGATION ── */
+document.addEventListener('click', function(e) {
+    var toggleBtn = e.target.closest('.toggle-host-btn');
+    if (toggleBtn) toggleHost(toggleBtn.dataset.id, toggleBtn.dataset.active === 'true', toggleBtn);
+
+    var editBtn = e.target.closest('.edit-host-btn');
+    if (editBtn) openEditHost(editBtn.dataset.id, editBtn.dataset.fullname,
+                               editBtn.dataset.unit, editBtn.dataset.pin,
+                               editBtn.dataset.phone, editBtn.dataset.type);
+});
+
+/* ── TOGGLE HOST ── */
+function toggleHost(id, isActive, btn) {
+    var action = isActive ? 'Deactivate' : 'Activate';
+    if (!confirm(action + ' this host. Are you sure?')) return;
+    fetch('/api/host/toggle/' + id, {method:'POST', headers:{'Content-Type':'application/json'}})
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { showToast('Toggle failed.', 'error'); return; }
+        var row = document.getElementById('host-row-' + id);
+        var statusCell = row.querySelector('.h-status');
+        if (d.active) {
+            statusCell.innerHTML = '<span class="badge badge-status-active">● Active</span>';
+            btn.textContent = 'Deactivate';
+            btn.setAttribute('onclick', 'toggleHost(' + id + ', true, this)');
+        } else {
+            statusCell.innerHTML = '<span class="badge badge-status-inactive">○ Inactive</span>';
+            btn.textContent = 'Activate';
+            btn.setAttribute('onclick', 'toggleHost(' + id + ', false, this)');
+        }
+        showToast('Host ' + (d.active ? 'activated' : 'deactivated') + '.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
+}
+
+/* ── EDIT HOST ── */
+function openEditHost(id, name, unit, pin, phone, type) {
+    document.getElementById('eh_id').value    = id;
+    document.getElementById('eh_name').value  = name;
+    document.getElementById('eh_unit').value  = unit;
+    document.getElementById('eh_pin').value   = pin;
+    document.getElementById('eh_phone').value = phone;
+    document.getElementById('eh_type').value  = type;
+    document.getElementById('edit-host-error').classList.remove('show');
+    document.getElementById('edit-host-modal').style.display = 'flex';
+}
+function saveHostEdit() {
+    var id   = document.getElementById('eh_id').value;
+    var name = document.getElementById('eh_name').value.trim();
+    var unit = document.getElementById('eh_unit').value.trim();
+    var pin  = document.getElementById('eh_pin').value.trim();
+    var phone= document.getElementById('eh_phone').value.trim();
+    var type = document.getElementById('eh_type').value;
+    var errEl= document.getElementById('edit-host-error');
+    errEl.classList.remove('show');
+
+    if (!name || !unit || !pin) { errEl.textContent='Name, unit and PIN are required.'; errEl.classList.add('show'); return; }
+    if (!pin.match(/^\d{4,}$/))  { errEl.textContent='PIN must be numbers only, minimum 4 digits.'; errEl.classList.add('show'); return; }
+
+    fetch('/api/host/edit/' + id, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({full_name:name, unit_number:unit, host_pin:pin, phone:phone, host_type:type})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { errEl.textContent=d.error; errEl.classList.add('show'); return; }
+        var row = document.getElementById('host-row-' + id);
+        row.querySelector('.h-name').textContent  = d.full_name;
+        row.querySelector('.h-unit').innerHTML    = '<code>' + d.unit_number + '</code>';
+        row.querySelector('.h-pin').innerHTML     = '<code>' + d.host_pin + '</code>';
+        row.querySelector('.h-phone').textContent = d.phone || '—';
+        row.querySelector('.h-type').innerHTML    =
+            '<span class="host-type-chip ' + d.host_type + '">' + d.host_type + '</span>';
+        row.dataset.unit = d.unit_number;
+        row.dataset.type = d.host_type;
+        closeModal('edit-host-modal');
+        showToast('Host updated.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
+}
+
+/* ── ADD HOST ── */
+function addHost() {
+    var name  = document.getElementById('ah_name').value.trim();
+    var unit  = document.getElementById('ah_unit').value.trim();
+    var pin   = document.getElementById('ah_pin').value.trim();
+    var phone = document.getElementById('ah_phone').value.trim();
+    var type  = document.getElementById('ah_type').value;
+    var errEl = document.getElementById('add-host-error');
+    errEl.classList.remove('show');
+
+    if (!name || !unit || !pin) { errEl.textContent='Name, unit and PIN are required.'; errEl.classList.add('show'); return; }
+    if (!pin.match(/^\d{4,}$/)) { errEl.textContent='PIN must be numbers only, minimum 4 digits.'; errEl.classList.add('show'); return; }
+
+    fetch('/api/host/add', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({full_name:name, unit_number:unit, host_pin:pin, phone:phone, host_type:type})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { errEl.textContent=d.error; errEl.classList.add('show'); return; }
+        var tbody = document.getElementById('hosts-tbody');
+        var id = 'new-' + Date.now();
+        var tr = document.createElement('tr');
+        tr.id = 'host-row-' + id;
+        tr.dataset.unit = unit; tr.dataset.type = type;
+        tr.innerHTML =
+            '<td style="font-weight:500;" class="h-name">' + name + '</td>' +
+            '<td class="h-unit"><code>' + unit + '</code></td>' +
+            '<td class="h-type"><span class="host-type-chip ' + type + '">' + type + '</span></td>' +
+            '<td class="h-pin"><code>' + pin + '</code></td>' +
+            '<td class="h-phone">' + (phone||'—') + '</td>' +
+            '<td class="h-status"><span class="badge badge-status-active">● Active</span></td>' +
+            '<td style="font-size:12px;color:var(--text-muted);">Reload to manage</td>';
+        tbody.appendChild(tr);
+        document.getElementById('ah_name').value  = '';
+        document.getElementById('ah_unit').value  = '';
+        document.getElementById('ah_pin').value   = '';
+        document.getElementById('ah_phone').value = '';
+        showToast('Host added successfully.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
+}
+
+/* ── DANGER ZONE ── */
+function resetAllHosts() {
+    fetch('/admin/reset-hosts', {method:'POST'})
+    .then(function(){ window.location.reload(); });
+}
+function resetAllVisits() {
+    fetch('/admin/reset-visits', {method:'POST'})
+    .then(function(){ showToast('All visit data cleared.', 'success'); });
 }
 </script>
 

@@ -9,6 +9,37 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+            padding: 12px 20px; border-radius: var(--radius-md);
+            font-size: 13px; font-weight: 500;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            transform: translateY(80px); opacity: 0;
+            transition: all 0.3s ease; pointer-events: none;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: var(--teal-soft); color: var(--teal-deep); border: 1px solid #B8E5D6; }
+        .toast.error   { background: var(--red-soft);  color: var(--red-strong); border: 1px solid #F4D0D0; }
+
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 28px;
+            width: 100%; max-width: 400px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .modal-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .modal-sub   { font-size: 12px; color: var(--text-muted); margin-bottom: 18px; }
+        .modal-error { font-size: 12px; color: var(--red-strong); margin-bottom: 10px; display: none; }
+        .modal-error.show { display: block; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 12px; }
+        .modal-actions .btn { flex: 1; }
+    </style>
 </head>
 <body>
 
@@ -38,21 +69,17 @@
     <a href="/audit-log">📜 Audit log</a>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
-{% endwith %}
-
 <div class="content">
     <div class="admin-grid">
 
+        <!-- GUARDS TABLE -->
         <div class="card">
             <div class="card-header">
                 <h2>👮 Guards</h2>
-                <span class="badge badge-status-active">{{ guards|length }} total</span>
+                <span class="badge badge-status-active" id="guard-count">{{ guards|length }} total</span>
             </div>
             <div class="table-wrap" style="border:none;border-radius:0;">
-                {% if guards %}
-                <table>
+                <table id="guards-table">
                     <thead>
                         <tr>
                             <th>Username</th>
@@ -62,23 +89,23 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="guards-tbody">
                         {% for guard in guards %}
                         {% set is_self = guard.guard_id == session.get('guard_id') %}
-                        <tr class="{{ 'self-row' if is_self else '' }}">
+                        <tr id="guard-row-{{ guard.guard_id }}" class="{{ 'self-row' if is_self else '' }}">
                             <td style="font-weight:500;">
-                                {{ guard.username }}
+                                <span class="g-username">{{ guard.username }}</span>
                                 {% if is_self %}<span class="badge badge-status-active" style="margin-left:6px;">You</span>{% endif %}
                             </td>
-                            <td>{{ guard.full_name }}</td>
-                            <td>
+                            <td class="g-fullname">{{ guard.full_name }}</td>
+                            <td class="g-role">
                                 {% if guard.role == 'admin' %}
                                 <span class="badge badge-delivery">Admin</span>
                                 {% else %}
                                 <span class="badge badge-guest">Guard</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="g-status">
                                 {% if guard.is_active %}
                                 <span class="badge badge-status-active">● Active</span>
                                 {% else %}
@@ -87,181 +114,292 @@
                             </td>
                             <td style="display:flex;gap:6px;flex-wrap:wrap;">
                                 {% if is_self %}
-                                <button class="btn btn-sm btn-secondary disabled" disabled title="Cannot modify your own account">🔒 Locked</button>
+                                <button class="btn btn-sm btn-secondary" disabled>🔒 Locked</button>
                                 {% else %}
-                                <form action="/manage-guards/toggle/{{ guard.guard_id }}" method="POST" style="display:inline;">
-                                    <button type="submit" class="btn btn-sm btn-secondary">
-                                        {{ 'Deactivate' if guard.is_active else 'Activate' }}
-                                    </button>
-                                </form>
+                                <button class="btn btn-sm btn-secondary toggle-guard-btn"
+                                        data-id="{{ guard.guard_id }}"
+                                        data-active="{{ 'true' if guard.is_active else 'false' }}">
+                                    {{ 'Deactivate' if guard.is_active else 'Activate' }}
+                                </button>
                                 {% endif %}
-                                <button type="button" class="btn btn-sm btn-secondary reset-pw-btn"
-                                        data-id="{{ guard.guard_id }}" data-username="{{ guard.username }}">
+                                <button class="btn btn-sm btn-secondary reset-pw-btn"
+                                        data-id="{{ guard.guard_id }}"
+                                        data-username="{{ guard.username }}">
                                     🔑 Reset PW
                                 </button>
-                                <button type="button" class="btn btn-sm btn-secondary edit-guard-btn"
+                                <button class="btn btn-sm btn-secondary edit-guard-btn"
                                         data-id="{{ guard.guard_id }}"
                                         data-username="{{ guard.username }}"
                                         data-fullname="{{ guard.full_name }}"
                                         data-role="{{ guard.role }}">
                                     ✏️ Edit
                                 </button>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                {% else %}
-                <div class="no-data"><span class="icon">👮</span>No guards yet.</div>
-                {% endif %}
             </div>
         </div>
 
+        <!-- ADD GUARD FORM -->
         <div class="card">
             <div class="card-header"><h2>➕ Add guard</h2></div>
             <div class="card-body">
-                <form method="POST" action="/manage-guards/add" autocomplete="off" id="addGuardForm">
-                    <label>Username *</label>
-                    <input type="text" name="username" id="ag_username" required
-                           placeholder="Letters and numbers only"
-                           oninput="enforceUsername(this)">
-                    <div class="field-error" id="ag_username_err">Letters and numbers only, no spaces.</div>
+                <div class="modal-error" id="add-guard-error"></div>
 
-                    <label>Full name *</label>
-                    <input type="text" name="full_name" id="ag_fullname" required
-                           placeholder="e.g. Jane Kamau"
-                           oninput="enforceLetters(this, 'ag_fullname_err')">
-                    <div class="field-error" id="ag_fullname_err">Letters and spaces only.</div>
+                <label>Username *</label>
+                <input type="text" id="ag_username" placeholder="Letters and numbers only"
+                       oninput="enforceUsername(this)">
 
-                    <label>Password *</label>
-                    <input type="password" name="password" id="ag_password" required
-                           minlength="6" placeholder="Minimum 6 characters"
-                           oninput="checkPasswordLength(this, 'ag_pw_err')">
-                    <div class="field-error" id="ag_pw_err">Password must be at least 6 characters.</div>
+                <label>Full name *</label>
+                <input type="text" id="ag_fullname" placeholder="e.g. Jane Kamau"
+                       oninput="enforceLetters(this)">
 
-                    <label>Role *</label>
-                    <select name="role">
-                        <option value="guard">Guard</option>
-                        <option value="admin">Admin</option>
-                    </select>
+                <label>Password *</label>
+                <input type="password" id="ag_password" placeholder="Minimum 6 characters">
 
-                    <button type="submit" class="btn">➕ Add guard</button>
-                </form>
+                <label>Role *</label>
+                <select id="ag_role">
+                    <option value="guard">Guard</option>
+                    <option value="admin">Admin</option>
+                </select>
+
+                <button class="btn" onclick="addGuard()">➕ Add guard</button>
 
                 <div class="info-note" style="margin-top:18px;">
                     <span>🔐</span>
-                    <span>You cannot deactivate your own account. Ask another admin.</span>
+                    <span>You cannot deactivate your own account.</span>
                 </div>
             </div>
         </div>
-
     </div>
 </div>
 
 <!-- EDIT GUARD MODAL -->
-<div id="edit-guard-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">✏️ Edit guard</h3>
-        <p id="edit-guard-subtitle" style="font-size:12px;color:var(--text-muted);margin-bottom:18px;"></p>
-        <form id="edit-guard-form" method="POST">
-            <label>Username *</label>
-            <input type="text" name="username" id="eg_username" required placeholder="Letters and numbers only" oninput="enforceUsername(this)">
-            <label>Full name *</label>
-            <input type="text" name="full_name" id="eg_fullname" required placeholder="e.g. Jane Kamau" oninput="enforceLetters(this, null)">
-            <label>Role *</label>
-            <select name="role" id="eg_role">
-                <option value="guard">Guard</option>
-                <option value="admin">Admin</option>
-            </select>
-            <div style="display:flex;gap:10px;margin-top:8px;">
-                <button type="submit" class="btn" style="flex:1;">Save changes</button>
-                <button type="button" class="btn btn-secondary" style="flex:1;" onclick="closeModal('edit-guard-modal')">Cancel</button>
-            </div>
-        </form>
+<div class="modal-overlay" id="edit-guard-modal">
+    <div class="modal-box">
+        <div class="modal-title">✏️ Edit guard</div>
+        <div class="modal-sub" id="edit-guard-sub"></div>
+        <div class="modal-error" id="edit-guard-error"></div>
+        <input type="hidden" id="eg_id">
+        <label>Username *</label>
+        <input type="text" id="eg_username" oninput="enforceUsername(this)">
+        <label>Full name *</label>
+        <input type="text" id="eg_fullname" oninput="enforceLetters(this)">
+        <label>Role *</label>
+        <select id="eg_role">
+            <option value="guard">Guard</option>
+            <option value="admin">Admin</option>
+        </select>
+        <div class="modal-actions">
+            <button class="btn" onclick="saveGuardEdit()">Save changes</button>
+            <button class="btn btn-secondary" onclick="closeModal('edit-guard-modal')">Cancel</button>
+        </div>
     </div>
 </div>
 
 <!-- RESET PASSWORD MODAL -->
-<div id="reset-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">🔑 Reset password</h3>
-        <p id="reset-subtitle" style="font-size:12px;color:var(--text-muted);margin-bottom:18px;"></p>
-        <form id="reset-form" method="POST">
-            <label>New password *</label>
-            <input type="password" name="new_password" id="new_password" required minlength="6"
-                   placeholder="At least 6 characters" oninput="checkPasswordLength(this, 'reset_pw_err')">
-            <div class="field-error" id="reset_pw_err">Password must be at least 6 characters.</div>
-            <label style="margin-top:4px;">Confirm password *</label>
-            <input type="password" id="confirm_password" required minlength="6" placeholder="Repeat password">
-            <div id="pw-match-err" style="font-size:11px;color:var(--red-strong);display:none;margin-bottom:8px;">Passwords do not match.</div>
-            <div style="display:flex;gap:10px;margin-top:8px;">
-                <button type="submit" class="btn" style="flex:1;" onclick="return checkMatch()">Save</button>
-                <button type="button" class="btn btn-secondary" style="flex:1;" onclick="closeModal('reset-modal')">Cancel</button>
-            </div>
-        </form>
+<div class="modal-overlay" id="reset-modal">
+    <div class="modal-box">
+        <div class="modal-title">🔑 Reset password</div>
+        <div class="modal-sub" id="reset-sub"></div>
+        <div class="modal-error" id="reset-error"></div>
+        <input type="hidden" id="reset-guard-id">
+        <label>New password *</label>
+        <input type="password" id="reset-pw" placeholder="Minimum 6 characters">
+        <label>Confirm password *</label>
+        <input type="password" id="reset-pw2" placeholder="Repeat password">
+        <div class="modal-actions">
+            <button class="btn" onclick="savePasswordReset()">Save</button>
+            <button class="btn btn-secondary" onclick="closeModal('reset-modal')">Cancel</button>
+        </div>
     </div>
 </div>
 
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
 <script>
-// ── MODAL HELPERS ──
+var SESSION_GUARD_ID = "{{ session.get('guard_id') }}";
+
+/* ── TOAST ── */
+function showToast(msg, type) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + type;
+    setTimeout(function(){ t.classList.add('show'); }, 10);
+    setTimeout(function(){ t.classList.remove('show'); }, 3000);
+}
+
+/* ── MODAL ── */
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
 
-document.querySelectorAll('.reset-pw-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        document.getElementById('reset-form').action = '/manage-guards/reset-password/' + this.dataset.id;
-        document.getElementById('reset-subtitle').textContent = 'Guard: ' + this.dataset.username;
-        document.getElementById('new_password').value = '';
-        document.getElementById('confirm_password').value = '';
-        document.getElementById('pw-match-err').style.display = 'none';
-        openModal('reset-modal');
-        setTimeout(function(){ document.getElementById('new_password').focus(); }, 100);
-    });
+document.querySelectorAll('.modal-overlay').forEach(function(el) {
+    el.addEventListener('click', function(e) { if (e.target === this) this.style.display = 'none'; });
 });
 
-document.querySelectorAll('.edit-guard-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        document.getElementById('edit-guard-form').action = '/manage-guards/edit/' + this.dataset.id;
-        document.getElementById('edit-guard-subtitle').textContent = 'Editing: ' + this.dataset.username;
-        document.getElementById('eg_username').value = this.dataset.username;
-        document.getElementById('eg_fullname').value = this.dataset.fullname;
-        document.getElementById('eg_role').value = this.dataset.role;
-        openModal('edit-guard-modal');
-    });
-});
-
-// Close on backdrop
-['reset-modal','edit-guard-modal'].forEach(function(id) {
-    document.getElementById(id).addEventListener('click', function(e) {
-        if (e.target === this) closeModal(id);
-    });
-});
-
-function checkMatch() {
-    var pw = document.getElementById('new_password').value;
-    var cpw = document.getElementById('confirm_password').value;
-    if (pw !== cpw) { document.getElementById('pw-match-err').style.display = 'block'; return false; }
-    return true;
+/* ── VALIDATION ── */
+function enforceUsername(el) {
+    var c = el.value.replace(/[^a-zA-Z0-9_]/g, '');
+    if (el.value !== c) el.value = c;
+}
+function enforceLetters(el) {
+    var c = el.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
+    if (el.value !== c) el.value = c;
 }
 
-// ── VALIDATION ──
-function enforceUsername(input) {
-    var c = input.value.replace(/[^a-zA-Z0-9_]/g, '');
-    if (input.value !== c) { input.value = c; input.classList.add('error-field'); setTimeout(function(){ input.classList.remove('error-field'); }, 2000); }
-}
-function enforceLetters(input, errId) {
-    var c = input.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
-    if (input.value !== c) {
-        input.value = c; input.classList.add('error-field');
-        var e = errId ? document.getElementById(errId) : null;
-        if (e) e.classList.add('visible');
-        setTimeout(function(){ input.classList.remove('error-field'); if(e) e.classList.remove('visible'); }, 2500);
+/* ── EVENT DELEGATION ── */
+document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.toggle-guard-btn');
+    if (btn) {
+        toggleGuard(btn.dataset.id, btn.dataset.active === 'true', btn);
     }
+    var resetBtn = e.target.closest('.reset-pw-btn');
+    if (resetBtn) openResetModal(resetBtn.dataset.id, resetBtn.dataset.username);
+
+    var editBtn = e.target.closest('.edit-guard-btn');
+    if (editBtn) openEditGuardModal(editBtn.dataset.id, editBtn.dataset.username,
+                                    editBtn.dataset.fullname, editBtn.dataset.role);
+});
+
+/* ── TOGGLE GUARD ── */
+function toggleGuard(id, isActive, btn) {
+    var action = isActive ? 'Deactivate' : 'Activate';
+    if (!confirm(action + ' this guard. Are you sure?')) return;
+    fetch('/api/guard/toggle/' + id, {method:'POST',
+          headers:{'Content-Type':'application/json'}})
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { showToast(d.error, 'error'); return; }
+        var row = document.getElementById('guard-row-' + id);
+        var statusCell = row.querySelector('.g-status');
+        if (d.active) {
+            statusCell.innerHTML = '<span class="badge badge-status-active">● Active</span>';
+            btn.textContent = 'Deactivate';
+            btn.setAttribute('onclick', 'toggleGuard(' + id + ', true, this)');
+        } else {
+            statusCell.innerHTML = '<span class="badge badge-status-inactive">○ Inactive</span>';
+            btn.textContent = 'Activate';
+            btn.setAttribute('onclick', 'toggleGuard(' + id + ', false, this)');
+        }
+        showToast('Guard ' + (d.active ? 'activated' : 'deactivated') + '.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
 }
-function checkPasswordLength(input, errId) {
-    var e = document.getElementById(errId);
-    if (input.value.length > 0 && input.value.length < 6) { e.classList.add('visible'); input.classList.add('error-field'); }
-    else { e.classList.remove('visible'); input.classList.remove('error-field'); }
+
+/* ── EDIT GUARD ── */
+function openEditGuardModal(id, username, fullname, role) {
+    document.getElementById('eg_id').value       = id;
+    document.getElementById('eg_username').value = username;
+    document.getElementById('eg_fullname').value = fullname;
+    document.getElementById('eg_role').value     = role;
+    document.getElementById('edit-guard-sub').textContent = 'Editing: ' + username;
+    document.getElementById('edit-guard-error').classList.remove('show');
+    openModal('edit-guard-modal');
+}
+function saveGuardEdit() {
+    var id        = document.getElementById('eg_id').value;
+    var username  = document.getElementById('eg_username').value.trim();
+    var full_name = document.getElementById('eg_fullname').value.trim();
+    var role      = document.getElementById('eg_role').value;
+    var errEl     = document.getElementById('edit-guard-error');
+
+    if (!username || !full_name) {
+        errEl.textContent = 'Username and full name are required.';
+        errEl.classList.add('show'); return;
+    }
+    fetch('/api/guard/edit/' + id, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: username, full_name: full_name, role: role})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { errEl.textContent = d.error; errEl.classList.add('show'); return; }
+        var row = document.getElementById('guard-row-' + id);
+        row.querySelector('.g-username').textContent = d.username;
+        row.querySelector('.g-fullname').textContent = d.full_name;
+        row.querySelector('.g-role').innerHTML = d.role === 'admin'
+            ? '<span class="badge badge-delivery">Admin</span>'
+            : '<span class="badge badge-guest">Guard</span>';
+        closeModal('edit-guard-modal');
+        showToast('Guard updated.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
+}
+
+/* ── RESET PASSWORD ── */
+function openResetModal(id, username) {
+    document.getElementById('reset-guard-id').value = id;
+    document.getElementById('reset-sub').textContent = 'Guard: ' + username;
+    document.getElementById('reset-pw').value  = '';
+    document.getElementById('reset-pw2').value = '';
+    document.getElementById('reset-error').classList.remove('show');
+    openModal('reset-modal');
+}
+function savePasswordReset() {
+    var id  = document.getElementById('reset-guard-id').value;
+    var pw  = document.getElementById('reset-pw').value;
+    var pw2 = document.getElementById('reset-pw2').value;
+    var errEl = document.getElementById('reset-error');
+    if (pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.add('show'); return; }
+    if (pw !== pw2)    { errEl.textContent = 'Passwords do not match.';                  errEl.classList.add('show'); return; }
+    fetch('/api/guard/reset-password/' + id, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: pw})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { errEl.textContent = d.error; errEl.classList.add('show'); return; }
+        closeModal('reset-modal');
+        showToast('Password reset successfully.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
+}
+
+/* ── ADD GUARD ── */
+function addGuard() {
+    var username  = document.getElementById('ag_username').value.trim();
+    var full_name = document.getElementById('ag_fullname').value.trim();
+    var password  = document.getElementById('ag_password').value;
+    var role      = document.getElementById('ag_role').value;
+    var errEl     = document.getElementById('add-guard-error');
+
+    errEl.classList.remove('show');
+    if (!username || !full_name || !password) {
+        errEl.textContent = 'All fields are required.'; errEl.classList.add('show'); return;
+    }
+    if (password.length < 6) {
+        errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.add('show'); return;
+    }
+    fetch('/api/guard/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: username, full_name: full_name, password: password, role: role})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { errEl.textContent = d.error; errEl.classList.add('show'); return; }
+        // Add row to table without reload
+        var tbody = document.getElementById('guards-tbody');
+        var tr = document.createElement('tr');
+        tr.id = 'guard-row-new-' + Date.now();
+        tr.innerHTML =
+            '<td style="font-weight:500;"><span class="g-username">' + username + '</span></td>' +
+            '<td class="g-fullname">' + full_name + '</td>' +
+            '<td class="g-role"><span class="badge ' + (role==='admin'?'badge-delivery':'badge-guest') + '">' + (role==='admin'?'Admin':'Guard') + '</span></td>' +
+            '<td class="g-status"><span class="badge badge-status-active">● Active</span></td>' +
+            '<td><span style="color:var(--text-muted);font-size:12px;">Reload page to manage this guard</span></td>';
+        tbody.appendChild(tr);
+        // Clear form
+        document.getElementById('ag_username').value = '';
+        document.getElementById('ag_fullname').value = '';
+        document.getElementById('ag_password').value = '';
+        showToast('Guard added successfully.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
 }
 </script>
 

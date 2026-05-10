@@ -392,16 +392,36 @@ function togglePaxSection(cb) {
 function buildPaxFields(count) {
     var c=document.getElementById('pax_fields'); c.innerHTML='';
     for(var i=1;i<=count;i++){
-        var d=document.createElement('div');
-        var l=document.createElement('label'); l.textContent='Visitor '+i+' — National ID *'; l.style.marginTop='6px';
-        var inp=document.createElement('input');
-        inp.type='text'; inp.name='associated_id_'+i; inp.required=true; inp.placeholder='Numbers only';
+        var wrapper=document.createElement('div');
+        wrapper.style.cssText='background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;margin-bottom:10px;';
+
+        var heading=document.createElement('div');
+        heading.textContent='Visitor '+i;
+        heading.style.cssText='font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--teal);margin-bottom:8px;';
+
+        var lname=document.createElement('label'); lname.textContent='Full name *';
+        var iname=document.createElement('input');
+        iname.type='text'; iname.name='associated_name_'+i;
+        iname.placeholder='e.g. John Kamau'; iname.required=true;
+        iname.style.marginBottom='8px';
+        (function(el){el.addEventListener('input',function(){
+            el.value=el.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g,'');
+        });})(iname);
+
+        var lnid=document.createElement('label'); lnid.textContent='National ID *';
+        var inid=document.createElement('input');
+        inid.type='text'; inid.name='associated_id_'+i;
+        inid.placeholder='Numbers only'; inid.required=true;
         (function(el){el.addEventListener('input',function(){
             var clean=el.value.replace(/\D/g,'');
             if(el.value!==clean){el.value=clean; el.classList.add('error-field');
             setTimeout(function(){el.classList.remove('error-field');},2000);}
-        });})(inp);
-        d.appendChild(l); d.appendChild(inp); c.appendChild(d);
+        });})(inid);
+
+        wrapper.appendChild(heading);
+        wrapper.appendChild(lname); wrapper.appendChild(iname);
+        wrapper.appendChild(lnid);  wrapper.appendChild(inid);
+        c.appendChild(wrapper);
     }
 }
 </script>

@@ -354,12 +354,13 @@ def checkin():
                 details=f"Admin allowed {full_name} despite blacklist. Reason: {flagged['reason']}",
             )
 
-    passenger_ids = []
+    passengers = []  # list of (national_id, full_name) tuples
     if multi_pax:
         for i in range(1, pax_count_extra + 1):
-            pid = request.form.get(f"associated_id_{i}", "").strip()
+            pid  = request.form.get(f"associated_id_{i}",   "").strip()
+            pname= request.form.get(f"associated_name_{i}", "").strip()
             if pid:
-                passenger_ids.append(pid)
+                passengers.append((pid, pname or None))
 
     visitor_uuid = str(uuid.uuid4())
     log_uuid     = str(uuid.uuid4())
@@ -385,9 +386,9 @@ def checkin():
     }
 
     success = upsert_visit(data)
-    if success and passenger_ids:
-        for pid in passenger_ids:
-            upsert_passenger(log_uuid, pid)
+    if success and passengers:
+        for pid, pname in passengers:
+            upsert_passenger(log_uuid, pid, pname)
 
     if success:
         flash(f"{full_name} checked in successfully.", "success")
@@ -1246,6 +1247,219 @@ def edit_visit(log_uuid):
     except Exception as e:
         flash(f"Edit failed: {e}", "error")
     return redirect(url_for("dashboard"))
+
+
+# ── AJAX API ENDPOINTS (return JSON, used by fetch() calls) ───────────────
+
+@app.route("/api/guard/toggle/<int:guard_id>", methods=["POST"])
+@admin_required
+def api_toggle_guard(guard_id):
+    result = toggle_guard_server(guard_id, requesting_guard_id=session.get("guard_id"))
+    if result == "self":
+        return jsonify({"ok": False, "error": "You cannot toggle your own account."}), 403
+    if result is None:
+        return jsonify({"ok": False, "error": "Toggle failed."}), 500
+    _audit("GUARD_TOGGLE", target=str(guard_id),
+           details=f"new state: {'active' if result else 'inactive'}")
+    return jsonify({"ok": True, "active": result})
+
+
+@app.route("/api/guard/edit/<int:guard_id>", methods=["POST"])
+@admin_required
+def api_edit_guard(guard_id):
+    data      = request.get_json()
+    username  = (data.get("username") or "").strip()
+    full_name = (data.get("full_name") or "").strip()
+    role      = (data.get("role") or "guard").strip()
+    if not username or not full_name:
+        return jsonify({"ok": False, "error": "Username and full name are required."}), 400
+    from data.server_db import get_connection
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("UPDATE guards SET username=%s, full_name=%s, role=%s WHERE guard_id=%s",
+                    (username, full_name, role, guard_id))
+        conn.commit(); cur.close(); conn.close()
+        _audit("GUARD_EDIT", target=str(guard_id),
+               details=f"username={username}, full_name={full_name}, role={role}")
+        return jsonify({"ok": True, "username": username,
+                        "full_name": full_name, "role": role})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/guard/reset-password/<int:guard_id>", methods=["POST"])
+@admin_required
+def api_reset_password(guard_id):
+    data = request.get_json()
+    pw   = (data.get("password") or "").strip()
+    if len(pw) < 6:
+        return jsonify({"ok": False, "error": "Password must be at least 6 characters."}), 400
+    ok = reset_guard_password_server(guard_id, pw)
+    if ok:
+        _audit("GUARD_PASSWORD_RESET", target=str(guard_id))
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Reset failed."}), 500
+
+
+@app.route("/api/host/toggle/<int:host_id>", methods=["POST"])
+@admin_required
+def api_toggle_host(host_id):
+    new_state = toggle_resident_server(host_id)
+    _audit("HOST_TOGGLE", target=str(host_id),
+           details=f"new state: {'active' if new_state else 'inactive'}")
+    return jsonify({"ok": True, "active": new_state})
+
+
+@app.route("/api/host/edit/<int:host_id>", methods=["POST"])
+@admin_required
+def api_edit_host(host_id):
+    data        = request.get_json()
+    full_name   = (data.get("full_name")   or "").strip()
+    unit_number = (data.get("unit_number") or "").strip()
+    host_pin    = (data.get("host_pin")    or "").strip()
+    phone       = (data.get("phone")       or "").strip()
+    host_type   = (data.get("host_type")   or "residential").strip()
+    if not full_name or not unit_number or not host_pin:
+        return jsonify({"ok": False, "error": "Name, unit and PIN are required."}), 400
+    if not host_pin.isdigit() or len(host_pin) < 4:
+        return jsonify({"ok": False, "error": "PIN must be numbers only, minimum 4 digits."}), 400
+    from data.server_db import get_connection
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("""UPDATE residents
+                       SET full_name=%s, unit_number=%s, host_pin=%s,
+                           phone=%s, host_type=%s
+                       WHERE resident_id=%s""",
+                    (full_name, unit_number, host_pin, phone or None,
+                     host_type, host_id))
+        conn.commit(); cur.close(); conn.close()
+        _audit("HOST_EDIT", target=str(host_id),
+               details=f"{full_name} @ {unit_number}, PIN updated")
+        return jsonify({"ok": True, "full_name": full_name,
+                        "unit_number": unit_number, "host_pin": host_pin,
+                        "phone": phone, "host_type": host_type})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/blacklist/edit/<int:bl_id>", methods=["POST"])
+@admin_required
+def api_edit_blacklist(bl_id):
+    data        = request.get_json()
+    national_id = (data.get("national_id") or "").strip()
+    full_name   = (data.get("full_name")   or "").strip()
+    reason      = (data.get("reason")      or "").strip()
+    if not national_id or not reason:
+        return jsonify({"ok": False, "error": "National ID and reason are required."}), 400
+    if not national_id.isdigit():
+        return jsonify({"ok": False, "error": "National ID must be numbers only."}), 400
+    from data.server_db import get_connection
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("UPDATE blacklist SET national_id=%s, full_name=%s, reason=%s WHERE id=%s",
+                    (national_id, full_name, reason, bl_id))
+        conn.commit(); cur.close(); conn.close()
+        _audit("BLACKLIST_EDIT", target=f"NID:{national_id}", details=reason)
+        return jsonify({"ok": True, "national_id": national_id,
+                        "full_name": full_name, "reason": reason})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/blacklist/remove/<int:bl_id>", methods=["POST"])
+@admin_required
+def api_remove_blacklist(bl_id):
+    ok = remove_blacklist(bl_id)
+    if ok:
+        _audit("BLACKLIST_REMOVE", target=str(bl_id))
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Remove failed."}), 500
+
+
+@app.route("/api/host/add", methods=["POST"])
+@admin_required
+def api_add_host():
+    data        = request.get_json()
+    full_name   = (data.get("full_name")   or "").strip()
+    unit_number = (data.get("unit_number") or "").strip()
+    host_pin    = (data.get("host_pin")    or "").strip()
+    phone       = (data.get("phone")       or "").strip()
+    host_type   = (data.get("host_type")   or "residential").strip()
+    if not full_name or not unit_number or not host_pin:
+        return jsonify({"ok": False, "error": "Name, unit and PIN are required."}), 400
+    if not host_pin.isdigit() or len(host_pin) < 4:
+        return jsonify({"ok": False, "error": "PIN must be numbers only, minimum 4 digits."}), 400
+    ok = add_resident_server(full_name, unit_number, host_pin, phone, host_type, None)
+    if ok:
+        _audit("HOST_ADD", target=unit_number, details=f"{full_name} ({host_type})")
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "PIN already exists. Choose a different PIN."}), 400
+
+
+@app.route("/api/guard/add", methods=["POST"])
+@admin_required
+def api_add_guard():
+    data      = request.get_json()
+    username  = (data.get("username")  or "").strip()
+    full_name = (data.get("full_name") or "").strip()
+    password  = (data.get("password")  or "").strip()
+    role      = (data.get("role")      or "guard").strip()
+    if not username or not full_name or not password:
+        return jsonify({"ok": False, "error": "All fields are required."}), 400
+    if len(password) < 6:
+        return jsonify({"ok": False, "error": "Password must be at least 6 characters."}), 400
+    ok = add_guard_server(username, password, full_name, role)
+    if ok:
+        _audit("GUARD_ADD", target=username, details=f"role={role}")
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": f"Username '{username}' already exists."}), 400
+
+
+@app.route("/api/blacklist/add", methods=["POST"])
+@admin_required
+def api_add_blacklist():
+    data        = request.get_json()
+    national_id = (data.get("national_id") or "").strip()
+    full_name   = (data.get("full_name")   or "").strip()
+    reason      = (data.get("reason")      or "").strip()
+    if not national_id or not reason:
+        return jsonify({"ok": False, "error": "National ID and reason are required."}), 400
+    if not national_id.isdigit():
+        return jsonify({"ok": False, "error": "National ID must be numbers only."}), 400
+    ok = add_blacklist(national_id, full_name, reason, session.get("guard_id"))
+    if ok:
+        _audit("BLACKLIST_ADD", target=f"NID:{national_id}", details=reason)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Failed to add to blacklist."}), 400
+
+
+@app.route("/api/visit/edit/<log_uuid>", methods=["POST"])
+@admin_required
+def api_edit_visit(log_uuid):
+    data        = request.get_json()
+    full_name   = (data.get("full_name")   or "").strip()
+    national_id = (data.get("national_id") or "").strip()
+    reason      = (data.get("reason")      or "").strip()
+    host_unit   = (data.get("host_unit")   or "").strip()
+    if not full_name:
+        return jsonify({"ok": False, "error": "Full name is required."}), 400
+    from data.server_db import get_connection
+    try:
+        conn = get_connection(); cur = conn.cursor()
+        cur.execute("SELECT visitor_uuid FROM visit_logs WHERE local_uuid=%s", (log_uuid,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "Visit not found."}), 404
+        cur.execute("UPDATE visitors SET full_name=%s, national_id=%s WHERE local_uuid=%s",
+                    (full_name, national_id or None, row["visitor_uuid"]))
+        cur.execute("UPDATE visit_logs SET reason_for_visit=%s, host_unit=%s WHERE local_uuid=%s",
+                    (reason or None, host_unit or None, log_uuid))
+        conn.commit(); cur.close(); conn.close()
+        _audit("VISIT_EDIT", target=log_uuid,
+               details=f"Admin corrected: {full_name}, NID={national_id}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 # ── STARTUP ───────────────────────────────────────────────────────────────
 

@@ -9,6 +9,35 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+            padding: 12px 20px; border-radius: var(--radius-md);
+            font-size: 13px; font-weight: 500;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            transform: translateY(80px); opacity: 0;
+            transition: all 0.3s ease; pointer-events: none;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: var(--teal-soft); color: var(--teal-deep); border: 1px solid #B8E5D6; }
+        .toast.error   { background: var(--red-soft);  color: var(--red-strong); border: 1px solid #F4D0D0; }
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 28px;
+            width: 100%; max-width: 420px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .modal-title  { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+        .modal-error  { font-size: 12px; color: var(--red-strong); margin-bottom: 10px; display: none; }
+        .modal-error.show { display: block; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 12px; }
+        .modal-actions .btn { flex: 1; }
+    </style>
 </head>
 <body>
 
@@ -38,22 +67,18 @@
     <a href="/audit-log">📜 Audit log</a>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
-{% endwith %}
-
 <div class="content">
     <div class="admin-grid">
 
+        <!-- BLACKLIST TABLE -->
         <div class="card">
             <div class="card-header">
                 <h2>⛔ Blacklisted visitors</h2>
-                <span style="background:var(--red-soft);color:var(--red-strong);padding:3px 10px;border-radius:14px;font-size:12px;font-weight:500;">
+                <span id="bl-count" style="background:var(--red-soft);color:var(--red-strong);padding:3px 10px;border-radius:14px;font-size:12px;font-weight:500;">
                     {{ entries|length }} flagged
                 </span>
             </div>
             <div class="table-wrap" style="border:none;border-radius:0;">
-                {% if entries %}
                 <table>
                     <thead>
                         <tr>
@@ -65,34 +90,35 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="bl-tbody">
                         {% for e in entries %}
-                        <tr>
-                            <td><code style="background:var(--red-soft);color:var(--red-strong);">{{ e.national_id }}</code></td>
-                            <td style="font-weight:500;">{{ e.full_name or '—' }}</td>
-                            <td style="font-style:italic;color:var(--text-muted);">{{ e.reason }}</td>
+                        <tr id="bl-row-{{ e.id }}">
+                            <td><code class="bl-nid" style="background:var(--red-soft);color:var(--red-strong);">{{ e.national_id }}</code></td>
+                            <td style="font-weight:500;" class="bl-name">{{ e.full_name or '—' }}</td>
+                            <td style="font-style:italic;color:var(--text-muted);" class="bl-reason">{{ e.reason }}</td>
                             <td style="font-size:12px;color:var(--text-muted);">{{ e.added_by_name or '—' }}</td>
                             <td style="font-size:12px;color:var(--text-muted);white-space:nowrap;">
                                 {{ e.added_at.strftime('%d %b %Y') if e.added_at else '—' }}
                             </td>
                             <td style="display:flex;gap:6px;">
-                                <button type="button" class="btn btn-sm btn-secondary edit-bl-btn"
+                            <td style="display:flex;gap:6px;">
+                                <button class="btn btn-sm btn-secondary edit-bl-btn"
                                         data-id="{{ e.id }}"
                                         data-nid="{{ e.national_id }}"
                                         data-name="{{ e.full_name or '' }}"
-                                        data-reason="{{ e.reason }}">
+                                        data-reason="{{ e.reason|replace('"', '&quot;') }}">
                                     ✏️ Edit
                                 </button>
-                                <form action="/blacklist/remove/{{ e.id }}" method="POST"
-                                      onsubmit="return confirm('Remove {{ e.national_id }} from blacklist?');">
-                                    <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
-                                </form>
-                            </td>
+                                <button class="btn btn-sm btn-secondary remove-bl-btn"
+                                        data-id="{{ e.id }}"
+                                        data-nid="{{ e.national_id }}">
+                                    Remove
+                                </button>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                {% else %}
+                {% if not entries %}
                 <div class="no-data">
                     <span class="icon">✅</span>
                     No visitors are currently blacklisted.
@@ -101,32 +127,28 @@
             </div>
         </div>
 
+        <!-- ADD TO BLACKLIST -->
         <div class="card">
             <div class="card-header"><h2>➕ Add to blacklist</h2></div>
             <div class="card-body">
-                <form method="POST" action="/blacklist/add" autocomplete="off">
-                    <label>National ID *</label>
-                    <input type="text" name="national_id" required
-                           placeholder="Numbers only"
-                           oninput="enforceDigits(this, 'bl_nid_err')">
-                    <div class="field-error" id="bl_nid_err">National ID must be numbers only.</div>
+                <div class="modal-error" id="add-bl-error"></div>
 
-                    <label>Visitor name (optional)</label>
-                    <input type="text" name="full_name"
-                           placeholder="Helps identify the person"
-                           oninput="enforceLetters(this, null)">
+                <label>National ID *</label>
+                <input type="text" id="abl_nid" placeholder="Numbers only"
+                       oninput="enforceDigits(this)">
 
-                    <label>Reason *</label>
-                    <input type="text" name="reason" required
-                           placeholder="Minimum 5 characters"
-                           minlength="5">
+                <label>Visitor name (optional)</label>
+                <input type="text" id="abl_name" placeholder="Helps identify the person"
+                       oninput="enforceLetters(this)">
 
-                    <button type="submit" class="btn">⛔ Add to blacklist</button>
-                </form>
+                <label>Reason *</label>
+                <input type="text" id="abl_reason" placeholder="Minimum 5 characters">
+
+                <button class="btn" onclick="addBL()">⛔ Add to blacklist</button>
 
                 <div class="info-note" style="margin-top:18px;">
                     <span>🔐</span>
-                    <span>When a blacklisted visitor tries to check in, entry is blocked automatically. Only admins can override — and every override is audited.</span>
+                    <span>Blacklisted visitors are blocked at check-in. Every override by an admin is recorded in the audit log.</span>
                 </div>
             </div>
         </div>
@@ -135,59 +157,146 @@
 </div>
 
 <!-- EDIT BLACKLIST MODAL -->
-<div id="edit-bl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">✏️ Edit blacklist entry</h3>
-        <form id="edit-bl-form" method="POST">
-            <label>National ID *</label>
-            <input type="text" name="national_id" id="ebl_nid" required
-                   oninput="enforceDigits(this, null)">
-
-            <label>Visitor name</label>
-            <input type="text" name="full_name" id="ebl_name"
-                   oninput="enforceLetters(this, null)">
-
-            <label>Reason *</label>
-            <input type="text" name="reason" id="ebl_reason" required minlength="5">
-
-            <div style="display:flex;gap:10px;margin-top:8px;">
-                <button type="submit" class="btn" style="flex:1;">Save changes</button>
-                <button type="button" class="btn btn-secondary" style="flex:1;"
-                        onclick="document.getElementById('edit-bl-modal').style.display='none'">Cancel</button>
-            </div>
-        </form>
+<div class="modal-overlay" id="edit-bl-modal">
+    <div class="modal-box">
+        <div class="modal-title">✏️ Edit blacklist entry</div>
+        <div class="modal-error" id="edit-bl-error"></div>
+        <input type="hidden" id="ebl_id">
+        <label>National ID *</label>
+        <input type="text" id="ebl_nid" oninput="enforceDigits(this)">
+        <label>Visitor name</label>
+        <input type="text" id="ebl_name" oninput="enforceLetters(this)">
+        <label>Reason *</label>
+        <input type="text" id="ebl_reason" minlength="5">
+        <div class="modal-actions">
+            <button class="btn" onclick="saveEditBL()">Save changes</button>
+            <button class="btn btn-secondary" onclick="closeModal('edit-bl-modal')">Cancel</button>
+        </div>
     </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-document.querySelectorAll('.edit-bl-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        document.getElementById('edit-bl-form').action = '/blacklist/edit/' + this.dataset.id;
-        document.getElementById('ebl_nid').value    = this.dataset.nid;
-        document.getElementById('ebl_name').value   = this.dataset.name;
-        document.getElementById('ebl_reason').value = this.dataset.reason;
-        document.getElementById('edit-bl-modal').style.display = 'flex';
-    });
+function showToast(msg, type) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast ' + type;
+    setTimeout(function(){ t.classList.add('show'); }, 10);
+    setTimeout(function(){ t.classList.remove('show'); }, 3000);
+}
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+document.querySelectorAll('.modal-overlay').forEach(function(el) {
+    el.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 });
-document.getElementById('edit-bl-modal').addEventListener('click', function(e) {
-    if (e.target === this) this.style.display = 'none';
+function enforceDigits(el) { el.value = el.value.replace(/\D/g, ''); }
+function enforceLetters(el) { el.value = el.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, ''); }
+
+/* ── ADD ── */
+function addBL() {
+    var nid    = document.getElementById('abl_nid').value.trim();
+    var name   = document.getElementById('abl_name').value.trim();
+    var reason = document.getElementById('abl_reason').value.trim();
+    var errEl  = document.getElementById('add-bl-error');
+    errEl.classList.remove('show');
+
+    if (!nid)              { errEl.textContent='National ID is required.'; errEl.classList.add('show'); return; }
+    if (!nid.match(/^\d+$/)){errEl.textContent='National ID must be numbers only.'; errEl.classList.add('show'); return; }
+    if (reason.length < 5) { errEl.textContent='Reason must be at least 5 characters.'; errEl.classList.add('show'); return; }
+
+    fetch('/api/blacklist/add', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({national_id:nid, full_name:name, reason:reason})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { errEl.textContent=d.error; errEl.classList.add('show'); return; }
+        var tbody = document.getElementById('bl-tbody');
+        var id = 'new-' + Date.now();
+        var tr = document.createElement('tr');
+        tr.id = 'bl-row-' + id;
+        tr.innerHTML =
+            '<td><code class="bl-nid" style="background:var(--red-soft);color:var(--red-strong);">' + nid + '</code></td>' +
+            '<td class="bl-name" style="font-weight:500;">' + (name||'—') + '</td>' +
+            '<td class="bl-reason" style="font-style:italic;color:var(--text-muted);">' + reason + '</td>' +
+            '<td style="font-size:12px;color:var(--text-muted);">{{ session.guard_name }}</td>' +
+            '<td style="font-size:12px;color:var(--text-muted);">Today</td>' +
+            '<td><span style="font-size:12px;color:var(--text-muted);">Reload to manage</span></td>';
+        tbody.appendChild(tr);
+        document.getElementById('abl_nid').value    = '';
+        document.getElementById('abl_name').value   = '';
+        document.getElementById('abl_reason').value = '';
+        showToast('Added to blacklist.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
+}
+
+/* ── EVENT DELEGATION FOR BUTTONS ── */
+document.addEventListener('click', function(e) {
+    var editBtn = e.target.closest('.edit-bl-btn');
+    var removeBtn = e.target.closest('.remove-bl-btn');
+    if (editBtn) {
+        openEditBL(editBtn.dataset.id, editBtn.dataset.nid,
+                   editBtn.dataset.name, editBtn.dataset.reason);
+    }
+    if (removeBtn) {
+        removeBL(removeBtn.dataset.id, removeBtn.dataset.nid);
+    }
 });
 
-function enforceDigits(input, errId) {
-    var c = input.value.replace(/\D/g, '');
-    if (input.value !== c) {
-        input.value = c; input.classList.add('error-field');
-        var e = errId ? document.getElementById(errId) : null;
-        if (e) e.classList.add('visible');
-        setTimeout(function(){ input.classList.remove('error-field'); if(e) e.classList.remove('visible'); }, 2500);
-    }
+/* ── REMOVE ── */
+function removeBL(id, nid) {
+    if (!confirm('Remove NID ' + nid + ' from blacklist? Are you sure?')) return;
+    fetch('/api/blacklist/remove/' + id, {method:'POST', headers:{'Content-Type':'application/json'}})
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { showToast('Remove failed.', 'error'); return; }
+        var row = document.getElementById('bl-row-' + id);
+        if (row) {
+            row.style.transition = 'opacity 0.3s ease';
+            row.style.opacity = '0';
+            setTimeout(function(){ row.remove(); }, 300);
+        }
+        showToast('Removed from blacklist.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
 }
-function enforceLetters(input, errId) {
-    var c = input.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, '');
-    if (input.value !== c) {
-        input.value = c; input.classList.add('error-field');
-        setTimeout(function(){ input.classList.remove('error-field'); }, 2500);
-    }
+
+/* ── EDIT ── */
+function openEditBL(id, nid, name, reason) {
+    document.getElementById('ebl_id').value     = id;
+    document.getElementById('ebl_nid').value    = nid;
+    document.getElementById('ebl_name').value   = name;
+    document.getElementById('ebl_reason').value = reason;
+    document.getElementById('edit-bl-error').classList.remove('show');
+    document.getElementById('edit-bl-modal').style.display = 'flex';
+}
+function saveEditBL() {
+    var id     = document.getElementById('ebl_id').value;
+    var nid    = document.getElementById('ebl_nid').value.trim();
+    var name   = document.getElementById('ebl_name').value.trim();
+    var reason = document.getElementById('ebl_reason').value.trim();
+    var errEl  = document.getElementById('edit-bl-error');
+    errEl.classList.remove('show');
+
+    if (!nid || !reason)   { errEl.textContent='National ID and reason are required.'; errEl.classList.add('show'); return; }
+    if (!nid.match(/^\d+$/)){errEl.textContent='National ID must be numbers only.'; errEl.classList.add('show'); return; }
+    if (reason.length < 5) { errEl.textContent='Reason must be at least 5 characters.'; errEl.classList.add('show'); return; }
+
+    fetch('/api/blacklist/edit/' + id, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({national_id:nid, full_name:name, reason:reason})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+        if (!d.ok) { errEl.textContent=d.error; errEl.classList.add('show'); return; }
+        var row = document.getElementById('bl-row-' + id);
+        row.querySelector('.bl-nid').textContent    = d.national_id;
+        row.querySelector('.bl-name').textContent   = d.full_name || '—';
+        row.querySelector('.bl-reason').textContent = d.reason;
+        closeModal('edit-bl-modal');
+        showToast('Blacklist entry updated.', 'success');
+    })
+    .catch(function(){ showToast('Request failed.', 'error'); });
 }
 </script>
 
