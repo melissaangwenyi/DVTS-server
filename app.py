@@ -1461,6 +1461,36 @@ def api_edit_visit(log_uuid):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+
+@app.route("/api/reports/data")
+@login_required
+def api_reports_data():
+    """Returns filtered history as JSON for AJAX table updates."""
+    f = _gather_report_filters()
+    raw_history = get_filtered_history(**f)
+    history = []
+    for r in raw_history:
+        history.append({
+            "local_uuid":          r.get("local_uuid",""),
+            "full_name":           r.get("full_name",""),
+            "national_id":         r.get("national_id","") or "",
+            "category":            r.get("category",""),
+            "host_unit":           r.get("host_unit","") or "",
+            "reason_for_visit":    r.get("reason_for_visit","") or "",
+            "pax_count":           r.get("pax_count",1),
+            "pax_ids":             r.get("pax_ids","—") or "—",
+            "check_in_display":    format_dt(r.get("check_in_time","")),
+            "check_out_display":   format_dt(r.get("check_out_time","")),
+            "check_in_time":       str(r.get("check_in_time","")),
+            "check_out_time":      str(r.get("check_out_time","")),
+            "duration":            duration_str(r.get("check_in_time",""), r.get("check_out_time","")),
+            "checkin_guard_name":  r.get("checkin_guard_name","") or "",
+            "checkout_guard_name": r.get("checkout_guard_name","") or "",
+            "was_overdue":         bool(r.get("was_overdue",False)),
+            "exception_flag":      bool(r.get("exception_flag",False)),
+        })
+    return jsonify({"history": history, "count": len(history)})
+
 # ── STARTUP ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

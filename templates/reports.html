@@ -10,120 +10,65 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <style>
-        /* ── REPORTS-SPECIFIC STYLES ── */
         .reports-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 20px;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
         }
-        .reports-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: var(--text);
-        }
-        .reports-meta {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
+        .reports-title { font-size: 20px; font-weight: 600; color: var(--text); }
+        .reports-meta  { font-size: 13px; color: var(--text-muted); }
 
-        /* Inline stat pills — not cards */
-        .stat-pills {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 18px;
-        }
+        .stat-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
         .stat-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            border: 1px solid var(--border);
-            background: var(--surface);
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 14px; border-radius: 20px; font-size: 13px;
+            font-weight: 500; border: 1px solid var(--border); background: var(--surface);
         }
-        .stat-pill .pill-value {
-            font-weight: 700;
-            font-size: 15px;
-        }
-        .stat-pill.teal   { background: var(--teal-soft);  border-color: #B8E5D6; color: var(--teal-deep); }
-        .stat-pill.amber  { background: var(--amber-soft); border-color: #F0D9A8; color: var(--amber-strong); }
-        .stat-pill.blue   { background: var(--blue-soft);  border-color: #C8DEF4; color: var(--blue-strong); }
-        .stat-pill.green  { background: var(--green-soft); border-color: #C8DDA8; color: var(--green-strong); }
+        .stat-pill .pill-value { font-weight: 700; font-size: 15px; }
+        .stat-pill.teal   { background:var(--teal-soft);  border-color:#B8E5D6; color:var(--teal-deep); }
+        .stat-pill.amber  { background:var(--amber-soft); border-color:#F0D9A8; color:var(--amber-strong); }
+        .stat-pill.blue   { background:var(--blue-soft);  border-color:#C8DEF4; color:var(--blue-strong); }
+        .stat-pill.green  { background:var(--green-soft); border-color:#C8DDA8; color:var(--green-strong); }
 
-        /* Compact filter bar */
         .filter-bar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: flex-end;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 14px 16px;
-            margin-bottom: 16px;
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 16px;
         }
-        .filter-bar .fb-field {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            flex: 1;
-            min-width: 120px;
-        }
-        .filter-bar label {
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-faint);
-            margin: 0;
-        }
-        .filter-bar select,
-        .filter-bar input {
-            margin: 0;
-            padding: 8px 10px;
-            font-size: 13px;
-        }
-        .filter-bar .fb-actions {
-            display: flex;
-            gap: 8px;
-            align-items: flex-end;
-        }
+        .filter-bar .fb-field { display:flex; flex-direction:column; gap:4px; flex:1; min-width:120px; }
+        .filter-bar label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-faint); margin:0; }
+        .filter-bar select, .filter-bar input { margin:0; padding:8px 10px; font-size:13px; }
+        .filter-bar .fb-actions { display:flex; gap:8px; align-items:flex-end; }
 
-        /* Clean table */
         .reports-table-wrap {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            overflow: hidden;
-            overflow-x: auto;
+            background:var(--surface); border:1px solid var(--border);
+            border-radius:var(--radius-lg); overflow:hidden; overflow-x:auto;
         }
-        .reports-table-wrap table {
-            min-width: 700px;
-        }
-        .empty-state {
-            padding: 60px 20px;
-            text-align: center;
-            color: var(--text-muted);
-        }
-        .empty-state .es-icon { font-size: 40px; display: block; margin-bottom: 10px; opacity: .35; }
-        .empty-state .es-text { font-size: 14px; }
-
+        .reports-table-wrap table { min-width:700px; }
+        .empty-state { padding:60px 20px; text-align:center; color:var(--text-muted); }
+        .empty-state .es-icon { font-size:40px; display:block; margin-bottom:10px; opacity:.35; }
         .tbl-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 16px;
-            background: var(--surface-alt);
-            border-top: 1px solid var(--border);
-            font-size: 12px;
-            color: var(--text-muted);
+            display:flex; align-items:center; justify-content:space-between;
+            padding:10px 16px; background:var(--surface-alt);
+            border-top:1px solid var(--border); font-size:12px; color:var(--text-muted);
         }
+
+        /* Loading state */
+        .table-loading {
+            opacity: 0.5;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .loading-spinner {
+            display: none;
+            width: 16px; height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--teal);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-left: 8px;
+        }
+        .loading-spinner.show { display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -156,21 +101,18 @@
     {% endif %}
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-        <div class="flash {{ category }}">{{ message }}</div>
-    {% endfor %}
-{% endwith %}
-
 <div class="content">
 
-    <!-- HEADER + STATS -->
+    <!-- HEADER -->
     <div class="reports-header">
         <div>
             <div class="reports-title">Visit Reports</div>
-            <div class="reports-meta">{{ history|length }} record(s) shown</div>
+            <div class="reports-meta">
+                <span id="record-count">{{ history|length }}</span> record(s) shown
+                <span class="loading-spinner" id="spinner"></span>
+            </div>
         </div>
-        <a href="{{ url_for('reports_export_csv', **request.args) }}" class="export-link">⬇ Export CSV</a>
+        <a href="/reports/export.csv" id="export-link" class="export-link">⬇ Export CSV</a>
     </div>
 
     <!-- STAT PILLS -->
@@ -183,64 +125,52 @@
         <span class="stat-pill green"><span class="pill-value">{{ stats.by_category.get('Maintenance', 0) }}</span> maintenance</span>
     </div>
 
-    <!-- FILTER BAR — auto-submits on change -->
-    <form method="GET" action="/reports" id="filterForm">
-        <div class="filter-bar">
-            <div class="fb-field">
-                <label>Category</label>
-                <select name="category" onchange="document.getElementById('filterForm').submit()">
-                    <option value="">All</option>
-                    <option value="Guest"       {{ 'selected' if request.args.get('category')=='Guest' }}>Guest</option>
-                    <option value="Delivery"    {{ 'selected' if request.args.get('category')=='Delivery' }}>Delivery</option>
-                    <option value="Maintenance" {{ 'selected' if request.args.get('category')=='Maintenance' }}>Maintenance</option>
-                    <option value="Other"       {{ 'selected' if request.args.get('category')=='Other' }}>Other</option>
-                </select>
-            </div>
-            <div class="fb-field">
-                <label>Unit / office</label>
-                <select name="host_unit" onchange="document.getElementById('filterForm').submit()">
-                    <option value="">All units</option>
-                    {% for u in units %}
-                    <option value="{{ u }}" {{ 'selected' if request.args.get('host_unit')==u }}>{{ u }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="fb-field">
-                <label>Date from</label>
-                <input type="date" name="date_from"
-                       value="{{ request.args.get('date_from','') }}"
-                       onchange="document.getElementById('filterForm').submit()">
-            </div>
-            <div class="fb-field">
-                <label>Date to</label>
-                <input type="date" name="date_to"
-                       value="{{ request.args.get('date_to','') }}"
-                       onchange="document.getElementById('filterForm').submit()">
-            </div>
-            <div class="fb-field">
-                <label>Time from</label>
-                <input type="time" name="time_from"
-                       value="{{ request.args.get('time_from','') }}"
-                       onchange="document.getElementById('filterForm').submit()">
-            </div>
-            <div class="fb-field">
-                <label>Time to</label>
-                <input type="time" name="time_to"
-                       value="{{ request.args.get('time_to','') }}"
-                       onchange="document.getElementById('filterForm').submit()">
-            </div>
-            <div class="fb-actions">
-                {% if request.args %}
-                <a href="/reports" class="btn btn-secondary" style="width:auto;padding:8px 16px;">Clear</a>
-                {% endif %}
-            </div>
+    <!-- FILTER BAR — AJAX, no page reload -->
+    <div class="filter-bar">
+        <div class="fb-field">
+            <label>Category</label>
+            <select id="f-category" onchange="fetchReports()">
+                <option value="">All</option>
+                <option value="Guest">Guest</option>
+                <option value="Delivery">Delivery</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Other">Other</option>
+            </select>
         </div>
-    </form>
+        <div class="fb-field">
+            <label>Unit / office</label>
+            <select id="f-unit" onchange="fetchReports()">
+                <option value="">All units</option>
+                {% for u in units %}
+                <option value="{{ u }}">{{ u }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="fb-field">
+            <label>Date from</label>
+            <input type="date" id="f-date-from" onchange="fetchReports()">
+        </div>
+        <div class="fb-field">
+            <label>Date to</label>
+            <input type="date" id="f-date-to" onchange="fetchReports()">
+        </div>
+        <div class="fb-field">
+            <label>Time from</label>
+            <input type="time" id="f-time-from" onchange="fetchReports()">
+        </div>
+        <div class="fb-field">
+            <label>Time to</label>
+            <input type="time" id="f-time-to" onchange="fetchReports()">
+        </div>
+        <div class="fb-actions">
+            <button class="btn btn-secondary" style="width:auto;padding:8px 16px;"
+                    onclick="clearFilters()">Clear</button>
+        </div>
+    </div>
 
-    <!-- TABLE -->
-    <div class="reports-table-wrap">
-        {% if history %}
-        <table>
+    <!-- TABLE — updated by AJAX -->
+    <div class="reports-table-wrap" id="reports-table-wrap">
+        <table id="reports-table">
             <thead>
                 <tr>
                     <th>Name <span class="expand-hint">click to expand</span></th>
@@ -254,7 +184,7 @@
                     <th></th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="reports-tbody">
                 {% for r in history %}
                 <tr class="expandable {{ 'was-overdue' if r.was_overdue else '' }}"
                     onclick="toggleDrawer('r{{ loop.index }}', this)">
@@ -314,21 +244,135 @@
                 {% endfor %}
             </tbody>
         </table>
-        <div class="tbl-footer">
+        <div class="tbl-footer" id="tbl-footer">
+            {% if history %}
             <span>{{ history|length }} record(s)</span>
             <span>Completed visits only · click a row to expand details</span>
+            {% else %}
+            <span>No records found</span>
+            <span></span>
+            {% endif %}
         </div>
-        {% else %}
-        <div class="empty-state">
-            <span class="es-icon">📊</span>
-            <span class="es-text">No completed visits match the selected filters.</span>
-        </div>
-        {% endif %}
     </div>
 
 </div>
 
 <script>
+var _debounceTimer = null;
+
+/* ── AJAX FILTER ── */
+function fetchReports() {
+    var params = new URLSearchParams();
+    var cat      = document.getElementById('f-category').value;
+    var unit     = document.getElementById('f-unit').value;
+    var dateFrom = document.getElementById('f-date-from').value;
+    var dateTo   = document.getElementById('f-date-to').value;
+    var timeFrom = document.getElementById('f-time-from').value;
+    var timeTo   = document.getElementById('f-time-to').value;
+
+    if (cat)      params.set('category',  cat);
+    if (unit)     params.set('host_unit', unit);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo)   params.set('date_to',   dateTo);
+    if (timeFrom) params.set('time_from', timeFrom);
+    if (timeTo)   params.set('time_to',   timeTo);
+
+    // Update export CSV link to respect current filters
+    document.getElementById('export-link').href = '/reports/export.csv?' + params.toString();
+
+    // Show spinner
+    document.getElementById('spinner').classList.add('show');
+    document.getElementById('reports-tbody').style.opacity = '0.4';
+
+    fetch('/api/reports/data?' + params.toString())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            renderTable(data.history);
+            document.getElementById('record-count').textContent = data.count;
+            document.getElementById('spinner').classList.remove('show');
+            document.getElementById('reports-tbody').style.opacity = '1';
+        })
+        .catch(function() {
+            document.getElementById('spinner').classList.remove('show');
+            document.getElementById('reports-tbody').style.opacity = '1';
+        });
+}
+
+function clearFilters() {
+    document.getElementById('f-category').value  = '';
+    document.getElementById('f-unit').value       = '';
+    document.getElementById('f-date-from').value  = '';
+    document.getElementById('f-date-to').value    = '';
+    document.getElementById('f-time-from').value  = '';
+    document.getElementById('f-time-to').value    = '';
+    document.getElementById('export-link').href   = '/reports/export.csv';
+    fetchReports();
+}
+
+/* ── RENDER TABLE ROWS FROM JSON ── */
+function renderTable(history) {
+    var tbody  = document.getElementById('reports-tbody');
+    var footer = document.getElementById('tbl-footer');
+    tbody.innerHTML = '';
+
+    if (!history || history.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><span class="es-icon">📊</span><span class="es-text">No completed visits match the selected filters.</span></div></td></tr>';
+        footer.innerHTML = '<span>0 records</span><span></span>';
+        return;
+    }
+
+    history.forEach(function(r, i) {
+        var idx    = i + 1;
+        var rowCls = r.was_overdue ? 'expandable was-overdue' : 'expandable';
+        var catLow = r.category.toLowerCase();
+        var catCls = ['guest','delivery','maintenance'].indexOf(catLow) >= 0 ? catLow : 'other';
+        var flags  = (r.was_overdue ? '🔴' : '') + (r.exception_flag ? '⚠' : '');
+        var flagCell = r.was_overdue ? '🔴' : r.exception_flag ? '⚠' : '—';
+
+        // Main row
+        var tr = document.createElement('tr');
+        tr.className = rowCls;
+        tr.setAttribute('onclick', 'toggleDrawer("aj' + idx + '", this)');
+        tr.innerHTML =
+            '<td style="font-weight:500;">' + esc(r.full_name) + ' ' + flags + '</td>' +
+            '<td><span class="badge badge-' + catCls + '">' + esc(r.category) + '</span></td>' +
+            '<td><code>' + esc(r.host_unit || '—') + '</code></td>' +
+            '<td style="white-space:nowrap;">' + esc(r.check_in_display) + '</td>' +
+            '<td style="white-space:nowrap;">' + esc(r.check_out_display) + '</td>' +
+            '<td style="white-space:nowrap;">' + esc(r.duration) + '</td>' +
+            '<td style="font-size:11px;color:var(--text-muted);">' + esc(r.checkin_guard_name || '—') + '</td>' +
+            '<td style="font-size:11px;color:var(--text-muted);">' + esc(r.checkout_guard_name || '—') + '</td>' +
+            '<td>' + flagCell + '</td>';
+        tbody.appendChild(tr);
+
+        // Drawer row
+        var paxSection = '';
+        if (r.pax_count > 1 && r.pax_ids && r.pax_ids !== '—') {
+            paxSection = '<div class="drawer-field"><span class="df-label">Associated IDs</span><span class="df-value mono">' + esc(r.pax_ids) + '</span></div>';
+        }
+        var dr = document.createElement('tr');
+        dr.id = 'aj' + idx;
+        dr.className = 'detail-drawer hidden';
+        dr.innerHTML = '<td colspan="9"><div class="drawer-inner">' +
+            '<div class="drawer-field"><span class="df-label">National ID</span><span class="df-value mono">' + (r.national_id || '— (no ID)') + '</span></div>' +
+            '<div class="drawer-field"><span class="df-label">Reason</span><span class="df-value muted">' + esc(r.reason_for_visit || '—') + '</span></div>' +
+            '<div class="drawer-field"><span class="df-label">Group size</span><span class="df-value">' + r.pax_count + ' person' + (r.pax_count > 1 ? 's' : '') + '</span></div>' +
+            paxSection +
+            '<div class="drawer-field"><span class="df-label">Check-in (exact)</span><span class="df-value mono">' + esc(r.check_in_time) + '</span></div>' +
+            '<div class="drawer-field"><span class="df-label">Check-out (exact)</span><span class="df-value mono">' + esc(r.check_out_time) + '</span></div>' +
+            '<div class="drawer-field"><span class="df-label">Entry type</span><span class="df-value">' + (r.exception_flag ? '⚠ Zero-trust' : '✓ Standard') + '</span></div>' +
+            '</div></td>';
+        tbody.appendChild(dr);
+    });
+
+    footer.innerHTML = '<span>' + history.length + ' record(s)</span><span>Completed visits only · click a row to expand</span>';
+}
+
+function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── DRAWER ── */
 function toggleDrawer(id, row) {
     var drawer = document.getElementById(id);
     if (!drawer) return;

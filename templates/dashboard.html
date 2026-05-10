@@ -85,7 +85,7 @@
                 <div class="field-error" id="name_error">Letters only.</div>
 
                 <label>Phone</label>
-                <input type="text" name="phone_number" id="phone_number" placeholder="e.g. 30012345"
+                <input type="text" name="phone_number" id="phone_number" placeholder="e.g. 0700912833"
                        oninput="enforceDigits(this,'phone_error');">
                 <div class="field-error" id="phone_error">Numbers only.</div>
 
@@ -95,7 +95,7 @@
                 <label>Visiting unit / office</label>
                 {% if hosts %}
                 <select name="host_unit" id="host_unit" required>
-                    <option value="">— Select unit / office —</option>
+                    <option value=""> Select unit / office </option>
                     {% for h in hosts %}
                     <option value="{{ h.unit_number }}">{{ h.unit_number }} — {{ h.full_name }}</option>
                     {% endfor %}
@@ -117,7 +117,7 @@
 
                 <label>Category *</label>
                 <select name="category" id="category_select" required onchange="toggleCategory(this)">
-                    <option value="">— Select —</option>
+                    <option value=""> Select </option>
                     <option value="Guest">Guest</option>
                     <option value="Delivery">Delivery</option>
                     <option value="Maintenance">Maintenance</option>
@@ -466,5 +466,75 @@ document.getElementById('edit-visit-modal').addEventListener('click', function(e
     if (e.target === this) this.style.display = 'none';
 });
 </script>
+
+<script>
+/* ── FORM PERSISTENCE — saves/restores check-in form state via localStorage ── */
+var FORM_STORAGE_KEY = 'vts-checkin-form';
+
+var SAVED_FIELDS = [
+    'full_name', 'national_id', 'phone_number', 'vehicle_plate',
+    'host_unit', 'reason', 'category_select'
+];
+
+function saveFormState() {
+    var state = {};
+    SAVED_FIELDS.forEach(function(id) {
+        var el = document.getElementById(id) || document.querySelector('[name="' + id.replace('_select','') + '"]');
+        if (!el) { el = document.getElementById(id); }
+        if (el) state[id] = el.value;
+    });
+    try { localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+}
+
+function restoreFormState() {
+    var raw;
+    try { raw = localStorage.getItem(FORM_STORAGE_KEY); } catch(e){ return; }
+    if (!raw) return;
+    var state;
+    try { state = JSON.parse(raw); } catch(e){ return; }
+
+    SAVED_FIELDS.forEach(function(id) {
+        var el = document.getElementById(id) || document.querySelector('[name="' + id.replace('_select','') + '"]');
+        if (!el) el = document.getElementById(id);
+        if (el && state[id] !== undefined) {
+            el.value = state[id];
+        }
+    });
+
+    // Re-trigger category options display if category was set
+    var catSel = document.getElementById('category_select');
+    if (catSel && catSel.value) {
+        toggleCategory(catSel);
+    }
+}
+
+function clearFormState() {
+    try { localStorage.removeItem(FORM_STORAGE_KEY); } catch(e){}
+}
+
+// Attach save listeners to all tracked fields
+document.addEventListener('DOMContentLoaded', function() {
+    // Restore first
+    restoreFormState();
+
+    // Then attach save listeners
+    SAVED_FIELDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', saveFormState);
+            el.addEventListener('change', saveFormState);
+        }
+    });
+
+    // Clear saved state after successful form submit
+    var form = document.getElementById('checkinForm');
+    if (form) {
+        form.addEventListener('submit', function() {
+            clearFormState();
+        });
+    }
+});
+</script>
+
 </body>
 </html>
