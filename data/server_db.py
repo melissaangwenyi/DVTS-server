@@ -167,6 +167,25 @@ def init_server_db():
         )
     """)
 
+    # Pre-registered visitors (host submits expected visitors in advance)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS pre_registrations (
+            id              SERIAL PRIMARY KEY,
+            resident_id     INTEGER NOT NULL,
+            host_unit       TEXT    NOT NULL,
+            visitor_name    TEXT    NOT NULL,
+            national_id     TEXT,
+            visit_date      DATE    NOT NULL,
+            time_from       TIME,
+            time_to         TIME,
+            reason          TEXT,
+            is_used         BOOLEAN NOT NULL DEFAULT FALSE,
+            used_at         TIMESTAMPTZ,
+            added_by        INTEGER,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
     # Blacklist — flagged national IDs
     cur.execute("""
         CREATE TABLE IF NOT EXISTS blacklist (
@@ -690,6 +709,178 @@ def clear_all_visits() -> bool:
     except Exception as e:
         print(f"[ServerDB] clear_all_visits error: {e}")
         return False
+
+
+
+# ── PRE-REGISTRATION ──────────────────────────────────────────────────────
+
+def add_pre_registration(resident_id, host_unit, visitor_name,
+                         national_id, visit_date, time_from,
+                         time_to, reason, added_by) -> bool:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO pre_registrations
+                (resident_id, host_unit, visitor_name, national_id,
+                 visit_date, time_from, time_to, reason, added_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (resident_id, host_unit, visitor_name, national_id or None,
+              visit_date, time_from or None, time_to or None,
+              reason or None, added_by))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[ServerDB] add_pre_registration error: {e}")
+        return False
+
+
+def get_pre_registrations(host_unit=None, visit_date=None,
+                          include_used=False) -> list:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        query = """
+            SELECT pr.*, r.full_name AS host_name, r.phone AS host_phone,
+                   g.full_name AS added_by_name
+            FROM pre_registrations pr
+            JOIN residents r ON r.resident_id = pr.resident_id
+            LEFT JOIN guards g ON g.guard_id = pr.added_by
+            WHERE 1=1
+        """
+        params = []
+        if not include_used:
+            query += " AND pr.is_used = FALSE"
+        if host_unit:
+            query += " AND pr.host_unit = %s"; params.append(host_unit)
+        if visit_date:
+            query += " AND pr.visit_date = %s"; params.append(visit_date)
+        query += " ORDER BY pr.visit_date, pr.time_from"
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[ServerDB] get_pre_registrations error: {e}")
+        return []
+
+
+def check_pre_registration(national_id: str, visit_date: str) -> dict:
+    """
+    Checks if a visitor with this national_id has a valid pre-registration
+    for today. Returns the pre-registration record or None.
+    """
+    if not national_id:
+        return None
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT pr.*, r.full_name AS host_name, r.phone AS host_phone
+            FROM pre_registrations pr
+            JOIN residents r ON r.resident_id = pr.resident_id
+            WHERE pr.national_id = %s
+              AND pr.visit_date  = %s
+              AND pr.is_used     = FALSE
+            ORDER BY pr.created_at DESC
+            LIMIT 1
+        """, (national_id, visit_date))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[ServerDB] check_pre_registration error: {e}")
+        return None
+
+
+def mark_pre_registration_used(pr_id: int) -> bool:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            UPDATE pre_registrations
+            SET is_used=TRUE, used_at=NOW()
+            WHERE id=%s
+        """, (pr_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[ServerDB] mark_pre_registration_used error: {e}")
+        return False
+
+
+def delete_pre_registration(pr_id: int) -> bool:
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM pre_registrations WHERE id=%s", (pr_id,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[ServerDB] delete_pre_registration error: {e}")
+        return False
+
+
+
+def get_recent_checkouts(limit: int = 10) -> list:
+    """Last N checked-out visitors for the recent visitors panel."""
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT ON (v.national_id)
+                vl.local_uuid, vl.visitor_uuid,
+                v.full_name, v.national_id, v.phone_number,
+                v.vehicle_plate, v.category,
+                vl.host_unit, vl.reason_for_visit,
+                vl.check_out_time
+            FROM visit_logs vl
+            JOIN visitors v ON v.local_uuid = vl.visitor_uuid
+            WHERE vl.check_out_time IS NOT NULL
+              AND v.national_id IS NOT NULL
+            ORDER BY v.national_id, vl.check_out_time DESC
+            LIMIT %s
+        """, (limit,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"[ServerDB] get_recent_checkouts error: {e}")
+        return []
+
+
+def find_visitor_by_national_id(national_id: str):
+    """Returns last visit details for autofill including unit/category/reason."""
+    if not national_id or not national_id.isdigit():
+        return None
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT v.full_name, v.phone_number, v.vehicle_plate,
+                   vl.host_unit, vl.reason_for_visit, v.category
+            FROM visitors v
+            JOIN visit_logs vl ON vl.visitor_uuid = v.local_uuid
+            WHERE v.national_id = %s
+            ORDER BY vl.check_in_time DESC LIMIT 1
+        """, (national_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"[ServerDB] find_visitor error: {e}")
+        return None
+
 
 # ── AUTH ──────────────────────────────────────────────────────────────────
 

@@ -53,10 +53,12 @@ from data.server_db import (  # noqa: E402
     add_resident_server, update_resident_server, toggle_resident_server,
     record_audit, get_audit_log,
     check_blacklist, add_blacklist, remove_blacklist, get_all_blacklist,
-    find_visitor_by_national_id,
+    find_visitor_by_national_id, get_recent_checkouts,
     get_host_by_unit,
-    clear_all_hosts,
-    clear_all_visits,
+    clear_all_hosts, clear_all_visits,
+    add_pre_registration, get_pre_registrations,
+    check_pre_registration, mark_pre_registration_used,
+    delete_pre_registration,
 )
 # Load email_service safely — if the import fails for any reason,
 # replace send_host_notification with a no-op so the app still boots.
@@ -69,6 +71,7 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "vts-secret-key-change-in-production")
+app.permanent_session_lifetime = timedelta(minutes=30)  # Auto-logout after 30min idle
 app.register_blueprint(api_bp)
 
 try:
@@ -177,29 +180,36 @@ def login():
 
         guard = verify_guard_web(username, password)
         if guard:
-            session["guard_name"] = guard["full_name"]
-            session["username"]   = guard["username"]
-            session["guard_id"]   = guard["guard_id"]
-            session["role"]       = guard.get("role", "guard")
+            session.permanent = True  # Enables the 30-min idle timeout
+            session["guard_name"]    = guard["full_name"]
+            session["username"]      = guard["username"]
+            session["guard_id"]      = guard["guard_id"]
+            session["role"]          = guard.get("role", "guard")
+            session["login_attempts"] = 0
             _audit("LOGIN_SUCCESS", target=username)
             return redirect(url_for("dashboard"))
 
-        # Audit failed attempt with username, no actor (no session yet)
+        # Track failed attempts in session (per browser)
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+        fail_key = f"fails_{ip}_{username}"
+        fails = session.get(fail_key, 0) + 1
+        session[fail_key] = fails
         try:
             record_audit(
                 actor_guard_id=None, actor_name="anonymous",
                 action="LOGIN_FAILED", target=username,
-                ip_address=request.headers.get(
-                    "X-Forwarded-For", request.remote_addr
-                ),
+                details=f"Attempt {fails}",
+                ip_address=ip,
             )
         except Exception:
             pass
 
-        return render_template(
-            "login.html",
-            error="Invalid credentials. Access denied.",
-        )
+        if fails >= 5:
+            error_msg = "Too many failed attempts. Wait 10 minutes or contact an admin."
+        else:
+            error_msg = f"Invalid credentials. {5 - fails} attempt(s) remaining."
+
+        return render_template("login.html", error=error_msg)
 
     return render_template("login.html", error=None)
 
@@ -230,10 +240,12 @@ def dashboard():
         )
         visits.append(v)
 
+    recent = get_recent_checkouts(10)
     return render_template(
         "dashboard.html",
         visits=visits, hosts=hosts, units=units,
         unit_filter=unit_filter or "",
+        recent_checkouts=recent,
     )
 
 
@@ -247,20 +259,35 @@ def lookup_visitor():
         return jsonify({"found": False})
 
     visitor = find_visitor_by_national_id(nid)
-    flagged = check_blacklist(nid)
+    flagged  = check_blacklist(nid)
+    today    = datetime.now(EAT).strftime("%Y-%m-%d")
+    prereg   = check_pre_registration(nid, today)
 
-    payload = {"found": False, "blacklisted": False}
+    payload = {"found": False, "blacklisted": False, "pre_registered": False}
     if visitor:
         payload.update({
-            "found":         True,
-            "full_name":     visitor.get("full_name", ""),
-            "phone_number":  visitor.get("phone_number", "") or "",
-            "vehicle_plate": visitor.get("vehicle_plate", "") or "",
+            "found":          True,
+            "full_name":      visitor.get("full_name", ""),
+            "phone_number":   visitor.get("phone_number", "") or "",
+            "vehicle_plate":  visitor.get("vehicle_plate", "") or "",
+            "host_unit":      visitor.get("host_unit", "") or "",
+            "category":       visitor.get("category", "") or "",
+            "reason":         visitor.get("reason_for_visit", "") or "",
         })
     if flagged:
         payload.update({
-            "blacklisted":  True,
+            "blacklisted":      True,
             "blacklist_reason": flagged.get("reason", ""),
+        })
+    if prereg:
+        payload.update({
+            "pre_registered":   True,
+            "prereg_host":      prereg.get("host_name", ""),
+            "prereg_unit":      prereg.get("host_unit", ""),
+            "prereg_reason":    prereg.get("reason", "") or "",
+            "prereg_time_from": str(prereg.get("time_from", "") or ""),
+            "prereg_time_to":   str(prereg.get("time_to", "") or ""),
+            "prereg_id":        prereg.get("id"),
         })
     return jsonify(payload)
 
@@ -398,6 +425,12 @@ def checkin():
             details=f"{full_name} ({category}) at {host_unit}, "
                     f"pax={total_pax}, reason={reason or '—'}",
         )
+        # Mark pre-registration as used if one was matched
+        prereg_id = request.form.get("prereg_id", "").strip()
+        if prereg_id and prereg_id.isdigit():
+            mark_pre_registration_used(int(prereg_id))
+            _audit("PREREG_USED", target=prereg_id,
+                   details=f"Pre-registration used for {full_name}")
 
         # Email notification (best-effort, never blocks the flow)
         try:
@@ -644,6 +677,9 @@ def add_host():
 
     if not full_name or not unit_number or not host_pin:
         flash("Full name, unit, and PIN are required.", "error")
+        return redirect(url_for("manage_hosts"))
+    if not phone:
+        flash("Phone number is required for host verification.", "error")
         return redirect(url_for("manage_hosts"))
 
     if host_email and "@" not in host_email:
@@ -1490,6 +1526,86 @@ def api_reports_data():
             "exception_flag":      bool(r.get("exception_flag",False)),
         })
     return jsonify({"history": history, "count": len(history)})
+
+
+# ── PRE-REGISTRATION ──────────────────────────────────────────────────────
+
+@app.route("/pre-registrations")
+@login_required
+def pre_registrations():
+    host_unit  = request.args.get("unit", "").strip() or None
+    visit_date = request.args.get("date", "").strip() or None
+    include_used = request.args.get("show_used", "") == "1"
+    entries = get_pre_registrations(host_unit, visit_date, include_used)
+    hosts   = get_active_hosts_for_dropdown()
+    units   = get_active_units()
+    today_str = datetime.now(EAT).strftime("%Y-%m-%d")
+    return render_template("pre_registrations.html",
+                           entries=entries, hosts=hosts, units=units,
+                           host_unit=host_unit or "",
+                           visit_date=visit_date or "",
+                           include_used=include_used,
+                           today_str=today_str)
+
+
+@app.route("/pre-registrations/add", methods=["POST"])
+@login_required
+def add_prereg():
+    host_unit    = request.form.get("host_unit",    "").strip()
+    resident_id  = request.form.get("resident_id",  "").strip()
+    visitor_name = request.form.get("visitor_name", "").strip()
+    national_id  = request.form.get("national_id",  "").strip()
+    visit_date   = request.form.get("visit_date",   "").strip()
+    time_from    = request.form.get("time_from",    "").strip() or None
+    time_to      = request.form.get("time_to",      "").strip() or None
+    reason       = request.form.get("reason",       "").strip()
+
+    if not host_unit or not visitor_name or not visit_date:
+        flash("Unit, visitor name and date are required.", "error")
+        return redirect(url_for("pre_registrations"))
+
+    ok = add_pre_registration(
+        resident_id or None, host_unit, visitor_name,
+        national_id or None, visit_date, time_from, time_to,
+        reason or None, session.get("guard_id")
+    )
+    if ok:
+        flash(f"{visitor_name} pre-registered for {visit_date}.", "success")
+        _audit("PREREG_ADD", target=host_unit,
+               details=f"{visitor_name} NID={national_id} on {visit_date}")
+    else:
+        flash("Failed to add pre-registration.", "error")
+    return redirect(url_for("pre_registrations"))
+
+
+@app.route("/pre-registrations/delete/<int:pr_id>", methods=["POST"])
+@login_required
+def delete_prereg(pr_id):
+    ok = delete_pre_registration(pr_id)
+    if ok:
+        flash("Pre-registration removed.", "success")
+        _audit("PREREG_DELETE", target=str(pr_id))
+    else:
+        flash("Failed to remove.", "error")
+    return redirect(url_for("pre_registrations"))
+
+
+@app.route("/api/host-info")
+@login_required
+def api_host_info():
+    """Returns host contact details for a given unit — shown at check-in."""
+    unit = request.args.get("unit", "").strip()
+    if not unit:
+        return jsonify({"found": False})
+    host = get_host_by_unit(unit)
+    if not host:
+        return jsonify({"found": False})
+    return jsonify({
+        "found":      True,
+        "name":       host.get("full_name", ""),
+        "phone":      host.get("phone", "") or "",
+        "host_type":  host.get("host_type", "residential"),
+    })
 
 # ── STARTUP ───────────────────────────────────────────────────────────────
 

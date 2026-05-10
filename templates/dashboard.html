@@ -32,6 +32,7 @@
 <div class="navbar">
     <a href="/dashboard" class="active">🏠 Dashboard</a>
     <a href="/reports">📊 Reports</a>
+    <a href="/pre-registrations">📋 Pre-register</a>
     {% if session.get('role') == 'admin' %}
     <a href="/manage-guards">👮 Guards</a>
     <a href="/manage-hosts">🏡 Hosts</a>
@@ -85,7 +86,7 @@
                 <div class="field-error" id="name_error">Letters only.</div>
 
                 <label>Phone</label>
-                <input type="text" name="phone_number" id="phone_number" placeholder="e.g. 0700912833"
+                <input type="text" name="phone_number" id="phone_number" placeholder="e.g. 30012345"
                        oninput="enforceDigits(this,'phone_error');">
                 <div class="field-error" id="phone_error">Numbers only.</div>
 
@@ -94,12 +95,26 @@
 
                 <label>Visiting unit / office</label>
                 {% if hosts %}
-                <select name="host_unit" id="host_unit" required>
-                    <option value=""> Select unit / office </option>
+                <select name="host_unit" id="host_unit" required
+                        onchange="loadHostInfo(this.value)">
+                    <option value="">Select unit / office</option>
                     {% for h in hosts %}
                     <option value="{{ h.unit_number }}">{{ h.unit_number }} — {{ h.full_name }}</option>
                     {% endfor %}
                 </select>
+                <!-- Host contact info — shown after unit is selected -->
+                <div id="host-info-box" style="display:none;background:var(--teal-soft);border:1px solid #B8E5D6;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:14px;font-size:12px;">
+                    <div style="font-weight:600;color:var(--teal-deep);margin-bottom:4px;">📋 Host details</div>
+                    <div id="host-info-name" style="color:var(--teal-deep);"></div>
+                    <div id="host-info-phone" style="color:var(--teal-deep);margin-top:2px;"></div>
+                    <div id="host-info-type" style="color:var(--text-muted);font-size:11px;margin-top:2px;"></div>
+                </div>
+                <!-- Pre-registration banner -->
+                <div id="prereg-banner" style="display:none;background:#E6F1FB;border:1px solid #C8DEF4;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:14px;font-size:12px;">
+                    <div style="font-weight:600;color:var(--blue-strong);margin-bottom:4px;">✅ Pre-registered visitor</div>
+                    <div id="prereg-details" style="color:var(--blue-strong);"></div>
+                    <input type="hidden" name="prereg_id" id="prereg_id_field" value="">
+                </div>
                 {% else %}
                 <div class="info-note" style="margin-bottom:14px;">
                     <span>ℹ</span>
@@ -117,7 +132,7 @@
 
                 <label>Category *</label>
                 <select name="category" id="category_select" required onchange="toggleCategory(this)">
-                    <option value=""> Select </option>
+                    <option value="">Select category</option>
                     <option value="Guest">Guest</option>
                     <option value="Delivery">Delivery</option>
                     <option value="Maintenance">Maintenance</option>
@@ -171,6 +186,32 @@
             <span>📋 On premises</span>
             <span class="count">{{ visits|length }} active</span>
         </div>
+
+        {% if recent_checkouts %}
+        <div style="padding:12px 20px 0;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--teal);margin-bottom:8px;">
+                🕐 Recent visitors — click to re-check in
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                {% for r in recent_checkouts %}
+                <button type="button"
+                        class="recent-visitor-btn"
+                        data-name="{{ r.full_name }}"
+                        data-nid="{{ r.national_id or '' }}"
+                        data-phone="{{ r.phone_number or '' }}"
+                        data-plate="{{ r.vehicle_plate or '' }}"
+                        data-unit="{{ r.host_unit or '' }}"
+                        data-category="{{ r.category or '' }}"
+                        data-reason="{{ r.reason_for_visit or '' }}"
+                        style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--text);transition:all .15s ease;"
+                        onmouseover="this.style.background='var(--teal-soft)';this.style.borderColor='var(--teal)';"
+                        onmouseout="this.style.background='var(--surface)';this.style.borderColor='var(--border)';">
+                    {{ r.full_name }}
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         {% if units %}
         <form method="GET" action="/dashboard" class="unit-filter-strip">
@@ -326,18 +367,59 @@ function maybeLookup(val) {
                 if (d.found) {
                     var nf=document.getElementById('full_name'),
                         pf=document.getElementById('phone_number'),
-                        vf=document.getElementById('vehicle_plate');
+                        vf=document.getElementById('vehicle_plate'),
+                        uf=document.getElementById('host_unit'),
+                        cf=document.getElementById('category_select'),
+                        rf=document.querySelector('[name="reason"]');
                     if(!nf.value) nf.value=d.full_name||'';
                     if(!pf.value) pf.value=d.phone_number||'';
                     if(!vf.value) vf.value=d.vehicle_plate||'';
+                    if(uf && !uf.value && d.host_unit) uf.value=d.host_unit;
+                    if(cf && !cf.value && d.category) {
+                        cf.value=d.category;
+                        toggleCategory(cf);
+                    }
+                    if(rf && !rf.value && d.reason) rf.value=d.reason;
+                    if(uf && d.host_unit) loadHostInfo(d.host_unit);
                     document.getElementById('autofill_banner').classList.add('visible');
                 }
                 if (d.blacklisted) {
                     document.getElementById('blacklist_reason').textContent='Reason: '+(d.blacklist_reason||'No reason recorded');
                     document.getElementById('blacklist_alert').classList.add('visible');
                 }
+                if (d.pre_registered) {
+                    var timeStr = '';
+                    if (d.prereg_time_from) timeStr = ' · ' + d.prereg_time_from + (d.prereg_time_to ? ' – ' + d.prereg_time_to : '');
+                    document.getElementById('prereg-details').innerHTML =
+                        'Expected by <strong>' + d.prereg_host + '</strong> at <strong>' + d.prereg_unit + '</strong>' + timeStr +
+                        (d.prereg_reason ? '<br>Reason: ' + d.prereg_reason : '');
+                    document.getElementById('prereg_id_field').value = d.prereg_id || '';
+                    document.getElementById('prereg-banner').style.display = 'block';
+                } else {
+                    document.getElementById('prereg-banner').style.display = 'none';
+                    document.getElementById('prereg_id_field').value = '';
+                }
             }).catch(function(){});
     }, 400);
+}
+
+function loadHostInfo(unit) {
+    var box      = document.getElementById('host-info-box');
+    var nameEl   = document.getElementById('host-info-name');
+    var phoneEl  = document.getElementById('host-info-phone');
+    var typeEl   = document.getElementById('host-info-type');
+    if (!unit) { box.style.display='none'; return; }
+    fetch('/api/host-info?unit=' + encodeURIComponent(unit))
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+            if (!d.found) { box.style.display='none'; return; }
+            nameEl.textContent  = '👤 ' + d.name;
+            phoneEl.innerHTML   = d.phone
+                ? '📞 <a href="tel:' + d.phone + '" style="color:var(--teal);font-weight:600;">' + d.phone + '</a>'
+                : '📞 No phone on file';
+            typeEl.textContent  = d.host_type === 'office' ? '🏢 Office' : '🏘 Residential';
+            box.style.display   = 'block';
+        }).catch(function(){ box.style.display='none'; });
 }
 
 /* ── VALIDATION ── */
@@ -468,6 +550,27 @@ document.getElementById('edit-visit-modal').addEventListener('click', function(e
 </script>
 
 <script>
+
+/* ── RECENT VISITOR QUICK FILL ── */
+document.querySelectorAll('.recent-visitor-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var d = this.dataset;
+        document.getElementById('full_name').value       = d.name    || '';
+        document.getElementById('national_id').value     = d.nid     || '';
+        document.getElementById('phone_number').value    = d.phone   || '';
+        document.getElementById('vehicle_plate').value   = d.plate   || '';
+        var uf = document.getElementById('host_unit');
+        if (uf && d.unit) { uf.value = d.unit; loadHostInfo(d.unit); }
+        var cf = document.getElementById('category_select');
+        if (cf && d.category) { cf.value = d.category; toggleCategory(cf); }
+        var rf = document.querySelector('[name="reason"]');
+        if (rf && d.reason) rf.value = d.reason;
+        // Scroll to form top
+        document.getElementById('checkinForm').scrollIntoView({behavior:'smooth'});
+        document.getElementById('full_name').focus();
+    });
+});
+
 /* ── FORM PERSISTENCE — saves/restores check-in form state via localStorage ── */
 var FORM_STORAGE_KEY = 'vts-checkin-form';
 
