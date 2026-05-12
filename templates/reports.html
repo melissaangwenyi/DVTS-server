@@ -85,8 +85,8 @@
         <button class="theme-toggle" aria-label="Toggle dark mode">
             <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
-        <span class="guard-pill">👮 {{ session.guard_name }}</span>
-        <a href="/logout" class="logout">🔒 Logout</a>
+        <span class="guard-pill"> {{ session.guard_name }}</span>
+        <a href="/logout" class="logout"> Logout</a>
     </div>
 </div>
 
@@ -236,7 +236,7 @@
                             </div>
                             <div class="drawer-field">
                                 <span class="df-label">Entry type</span>
-                                <span class="df-value">{{ '❕ Zero-trust' if r.exception_flag else '✓ Standard' }}</span>
+                                <span class="df-value">{{ '❕ Zero-trust' if r.exception_flag else ' Standard' }}</span>
                             </div>
                         </div>
                     </td>
