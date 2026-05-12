@@ -97,18 +97,18 @@
         <button class="theme-toggle" aria-label="Toggle dark mode">
             <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
-        <span class="guard-pill">👮 {{ session.guard_name }}</span>
-        <a href="/logout" class="logout">🔒 Logout</a>
+        <span class="guard-pill"> {{ session.guard_name }}</span>
+        <a href="/logout" class="logout"> Logout</a>
     </div>
 </div>
 
 <div class="navbar">
-    <a href="/dashboard">🏠 Dashboard</a>
-    <a href="/reports">📊 Reports</a>
-    <a href="/manage-guards">👮 Guards</a>
-    <a href="/manage-hosts">🏡 Hosts</a>
-    <a href="/blacklist">⛔ Blacklist</a>
-    <a href="/audit-log" class="active">📜 Audit log</a>
+    <a href="/dashboard"> Dashboard</a>
+    <a href="/reports"> Reports</a>
+    <a href="/manage-guards"> Guards</a>
+    <a href="/manage-hosts"> Hosts</a>
+    <a href="/blacklist"> Blacklist</a>
+    <a href="/audit-log" class="active"> Audit log</a>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -198,7 +198,6 @@
         </div>
         {% else %}
         <div class="no-data">
-            <span class="icon">📜</span>
             No audit entries match the current filter.
         </div>
         {% endif %}

@@ -53,18 +53,18 @@
         <button class="theme-toggle" aria-label="Toggle dark mode">
             <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
-        <span class="guard-pill">👮 {{ session.guard_name }}</span>
-        <a href="/logout" class="logout">🔒 Logout</a>
+        <span class="guard-pill"> {{ session.guard_name }}</span>
+        <a href="/logout" class="logout"> Logout</a>
     </div>
 </div>
 
 <div class="navbar">
-    <a href="/dashboard">🏠 Dashboard</a>
-    <a href="/reports">📊 Reports</a>
-    <a href="/manage-guards">👮 Guards</a>
-    <a href="/manage-hosts">🏡 Hosts</a>
-    <a href="/blacklist" class="active">⛔ Blacklist</a>
-    <a href="/audit-log">📜 Audit log</a>
+    <a href="/dashboard"> Dashboard</a>
+    <a href="/reports"> Reports</a>
+    <a href="/manage-guards"> Guards</a>
+    <a href="/manage-hosts"> Hosts</a>
+    <a href="/blacklist" class="active"> Blacklist</a>
+    <a href="/audit-log"> Audit log</a>
 </div>
 
 <div class="content">
@@ -73,7 +73,7 @@
         <!-- BLACKLIST TABLE -->
         <div class="card">
             <div class="card-header">
-                <h2>⛔ Blacklisted visitors</h2>
+                <h2> Blacklisted visitors</h2>
                 <span id="bl-count" style="background:var(--red-soft);color:var(--red-strong);padding:3px 10px;border-radius:14px;font-size:12px;font-weight:500;">
                     {{ entries|length }} flagged
                 </span>
@@ -107,7 +107,7 @@
                                         data-nid="{{ e.national_id }}"
                                         data-name="{{ e.full_name or '' }}"
                                         data-reason="{{ e.reason|replace('"', '&quot;') }}">
-                                    ✏️ Edit
+                                     Edit
                                 </button>
                                 <button class="btn btn-sm btn-secondary remove-bl-btn"
                                         data-id="{{ e.id }}"
@@ -120,7 +120,6 @@
                 </table>
                 {% if not entries %}
                 <div class="no-data">
-                    <span class="icon">✅</span>
                     No visitors are currently blacklisted.
                 </div>
                 {% endif %}
@@ -129,7 +128,7 @@
 
         <!-- ADD TO BLACKLIST -->
         <div class="card">
-            <div class="card-header"><h2>➕ Add to blacklist</h2></div>
+            <div class="card-header"><h2> Add to blacklist</h2></div>
             <div class="card-body">
                 <div class="modal-error" id="add-bl-error"></div>
 
@@ -144,10 +143,10 @@
                 <label>Reason *</label>
                 <input type="text" id="abl_reason" placeholder="Minimum 5 characters">
 
-                <button class="btn" onclick="addBL()">⛔ Add to blacklist</button>
+                <button class="btn" onclick="addBL()"> Add to blacklist</button>
 
                 <div class="info-note" style="margin-top:18px;">
-                    <span>🔐</span>
+                    
                     <span>Blacklisted visitors are blocked at check-in. Every override by an admin is recorded in the audit log.</span>
                 </div>
             </div>
@@ -159,7 +158,7 @@
 <!-- EDIT BLACKLIST MODAL -->
 <div class="modal-overlay" id="edit-bl-modal">
     <div class="modal-box">
-        <div class="modal-title">✏️ Edit blacklist entry</div>
+        <div class="modal-title"> Edit blacklist entry</div>
         <div class="modal-error" id="edit-bl-error"></div>
         <input type="hidden" id="ebl_id">
         <label>National ID *</label>

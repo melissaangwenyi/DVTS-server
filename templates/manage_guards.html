@@ -55,18 +55,18 @@
         <button class="theme-toggle" aria-label="Toggle dark mode">
             <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
-        <span class="guard-pill">👮 {{ session.guard_name }}</span>
-        <a href="/logout" class="logout">🔒 Logout</a>
+        <span class="guard-pill"> {{ session.guard_name }}</span>
+        <a href="/logout" class="logout"> Logout</a>
     </div>
 </div>
 
 <div class="navbar">
-    <a href="/dashboard">🏠 Dashboard</a>
-    <a href="/reports">📊 Reports</a>
-    <a href="/manage-guards" class="active">👮 Guards</a>
-    <a href="/manage-hosts">🏡 Hosts</a>
-    <a href="/blacklist">⛔ Blacklist</a>
-    <a href="/audit-log">📜 Audit log</a>
+    <a href="/dashboard"> Dashboard</a>
+    <a href="/reports"> Reports</a>
+    <a href="/manage-guards" class="active"> Guards</a>
+    <a href="/manage-hosts"> Hosts</a>
+    <a href="/blacklist"> Blacklist</a>
+    <a href="/audit-log"> Audit log</a>
 </div>
 
 <div class="content">
@@ -75,7 +75,7 @@
         <!-- GUARDS TABLE -->
         <div class="card">
             <div class="card-header">
-                <h2>👮 Guards</h2>
+                <h2> Guards</h2>
                 <span class="badge badge-status-active" id="guard-count">{{ guards|length }} total</span>
             </div>
             <div class="table-wrap" style="border:none;border-radius:0;">
@@ -107,14 +107,14 @@
                             </td>
                             <td class="g-status">
                                 {% if guard.is_active %}
-                                <span class="badge badge-status-active">● Active</span>
+                                <span class="badge badge-status-active"> Active</span>
                                 {% else %}
-                                <span class="badge badge-status-inactive">○ Inactive</span>
+                                <span class="badge badge-status-inactive"> Inactive</span>
                                 {% endif %}
                             </td>
                             <td style="display:flex;gap:6px;flex-wrap:wrap;">
                                 {% if is_self %}
-                                <button class="btn btn-sm btn-secondary" disabled>🔒 Locked</button>
+                                <button class="btn btn-sm btn-secondary" disabled> Locked</button>
                                 {% else %}
                                 <button class="btn btn-sm btn-secondary toggle-guard-btn"
                                         data-id="{{ guard.guard_id }}"
@@ -125,14 +125,14 @@
                                 <button class="btn btn-sm btn-secondary reset-pw-btn"
                                         data-id="{{ guard.guard_id }}"
                                         data-username="{{ guard.username }}">
-                                    🔑 Reset PW
+                                     Reset PW
                                 </button>
                                 <button class="btn btn-sm btn-secondary edit-guard-btn"
                                         data-id="{{ guard.guard_id }}"
                                         data-username="{{ guard.username }}"
                                         data-fullname="{{ guard.full_name }}"
                                         data-role="{{ guard.role }}">
-                                    ✏️ Edit
+                                     Edit
                                 </button>
                         </tr>
                         {% endfor %}
@@ -143,7 +143,7 @@
 
         <!-- ADD GUARD FORM -->
         <div class="card">
-            <div class="card-header"><h2>➕ Add guard</h2></div>
+            <div class="card-header"><h2> Add guard</h2></div>
             <div class="card-body">
                 <div class="modal-error" id="add-guard-error"></div>
 
@@ -164,10 +164,10 @@
                     <option value="admin">Admin</option>
                 </select>
 
-                <button class="btn" onclick="addGuard()">➕ Add guard</button>
+                <button class="btn" onclick="addGuard()"> Add guard</button>
 
                 <div class="info-note" style="margin-top:18px;">
-                    <span>🔐</span>
+    
                     <span>You cannot deactivate your own account.</span>
                 </div>
             </div>
@@ -178,7 +178,7 @@
 <!-- EDIT GUARD MODAL -->
 <div class="modal-overlay" id="edit-guard-modal">
     <div class="modal-box">
-        <div class="modal-title">✏️ Edit guard</div>
+        <div class="modal-title"> Edit guard</div>
         <div class="modal-sub" id="edit-guard-sub"></div>
         <div class="modal-error" id="edit-guard-error"></div>
         <input type="hidden" id="eg_id">
@@ -201,7 +201,7 @@
 <!-- RESET PASSWORD MODAL -->
 <div class="modal-overlay" id="reset-modal">
     <div class="modal-box">
-        <div class="modal-title">🔑 Reset password</div>
+        <div class="modal-title"> Reset password</div>
         <div class="modal-sub" id="reset-sub"></div>
         <div class="modal-error" id="reset-error"></div>
         <input type="hidden" id="reset-guard-id">

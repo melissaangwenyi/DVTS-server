@@ -24,20 +24,20 @@
         <button class="theme-toggle" aria-label="Toggle dark mode">
             <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
-        <span class="guard-pill">👮 {{ session.guard_name }}</span>
-        <a href="/logout" class="logout">🔒 Logout</a>
+        <span class="guard-pill"> {{ session.guard_name }}</span>
+        <a href="/logout" class="logout"> Logout</a>
     </div>
 </div>
 
 <div class="navbar">
-    <a href="/dashboard" class="active">🏠 Dashboard</a>
-    <a href="/reports">📊 Reports</a>
-    <a href="/pre-registrations">📋 Pre-register</a>
+    <a href="/dashboard" class="active"> Dashboard</a>
+    <a href="/reports"> Reports</a>
+    <a href="/pre-registrations"> Pre-register</a>
     {% if session.get('role') == 'admin' %}
-    <a href="/manage-guards">👮 Guards</a>
-    <a href="/manage-hosts">🏡 Hosts</a>
-    <a href="/blacklist">⛔ Blacklist</a>
-    <a href="/audit-log">📜 Audit log</a>
+    <a href="/manage-guards"> Guards</a>
+    <a href="/manage-hosts"> Hosts</a>
+    <a href="/blacklist"> Blacklist</a>
+    <a href="/audit-log"> Audit log</a>
     {% endif %}
 </div>
 
@@ -56,11 +56,11 @@
             <form method="POST" action="/checkin" id="checkinForm" autocomplete="off">
 
                 <div class="autofill-banner" id="autofill_banner">
-                    <span>✨</span>
+                    
                     <span>Returning visitor — details filled automatically.</span>
                 </div>
                 <div class="blacklist-alert" id="blacklist_alert">
-                    <div class="title">⛔ Visitor is blacklisted</div>
+                    <div class="title"> Visitor is blacklisted</div>
                     <div class="reason" id="blacklist_reason"></div>
                     {% if session.get('role') == 'admin' %}
                     <label class="override-row">
@@ -104,14 +104,14 @@
                 </select>
                 <!-- Host contact info — shown after unit is selected -->
                 <div id="host-info-box" style="display:none;background:var(--teal-soft);border:1px solid #B8E5D6;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:14px;font-size:12px;">
-                    <div style="font-weight:600;color:var(--teal-deep);margin-bottom:4px;">📋 Host details</div>
+                    <div style="font-weight:600;color:var(--teal-deep);margin-bottom:4px;"> Host details</div>
                     <div id="host-info-name" style="color:var(--teal-deep);"></div>
                     <div id="host-info-phone" style="color:var(--teal-deep);margin-top:2px;"></div>
                     <div id="host-info-type" style="color:var(--text-muted);font-size:11px;margin-top:2px;"></div>
                 </div>
                 <!-- Pre-registration banner -->
                 <div id="prereg-banner" style="display:none;background:#E6F1FB;border:1px solid #C8DEF4;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:14px;font-size:12px;">
-                    <div style="font-weight:600;color:var(--blue-strong);margin-bottom:4px;">✅ Pre-registered visitor</div>
+                    <div style="font-weight:600;color:var(--blue-strong);margin-bottom:4px;"> Pre-registered visitor</div>
                     <div id="prereg-details" style="color:var(--blue-strong);"></div>
                     <input type="hidden" name="prereg_id" id="prereg_id_field" value="">
                 </div>
@@ -175,7 +175,7 @@
                     <div id="pax_fields"></div>
                 </div>
 
-                <button type="submit" class="btn" style="margin-top:8px;">🔒 Check in</button>
+                <button type="submit" class="btn" style="margin-top:8px;"> Check in</button>
             </form>
         </div>
     </div>
@@ -183,14 +183,14 @@
     <!-- ── RIGHT: ACTIVE OCCUPANCY ── -->
     <div class="right-panel">
         <div class="panel-header">
-            <span>📋 On premises</span>
+            <span> On premises</span>
             <span class="count">{{ visits|length }} active</span>
         </div>
 
         {% if recent_checkouts %}
         <div style="padding:12px 20px 0;">
             <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--teal);margin-bottom:8px;">
-                🕐 Recent visitors — click to re-check in
+                 Recent visitors — click to re-check in
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
                 {% for r in recent_checkouts %}
@@ -248,7 +248,7 @@
                     data-uuid="{{ v.local_uuid }}">
                     <td style="font-weight:500;">
                         {{ v.full_name }}
-                        {% if v.exception_flag %}<span style="color:var(--amber-strong);" title="No-ID">⚠</span>{% endif %}
+                        {% if v.exception_flag %}<span style="color:var(--amber-strong);" title="No-ID">❕</span>{% endif %}
                         {% if v.overdue %}<span title="Overdue">🔴</span>{% endif %}
                     </td>
                     <td>
@@ -272,7 +272,7 @@
                                 data-nid="{{ v.national_id or '' }}"
                                 data-reason="{{ v.reason_for_visit or '' }}"
                                 data-unit="{{ v.host_unit or '' }}">
-                            ✏️
+                            
                         </button>
                         {% endif %}
                     </td>
@@ -323,7 +323,7 @@
         </table>
         {% else %}
         <div class="no-data">
-            <span class="icon">👋</span>
+            
             {% if unit_filter %}No visitors in <strong>{{ unit_filter }}</strong>.
             {% else %}No visitors currently on premises.{% endif %}
         </div>
@@ -413,11 +413,11 @@ function loadHostInfo(unit) {
         .then(function(r){ return r.json(); })
         .then(function(d) {
             if (!d.found) { box.style.display='none'; return; }
-            nameEl.textContent  = '👤 ' + d.name;
+            nameEl.textContent  =  d.name;
             phoneEl.innerHTML   = d.phone
-                ? '📞 <a href="tel:' + d.phone + '" style="color:var(--teal);font-weight:600;">' + d.phone + '</a>'
-                : '📞 No phone on file';
-            typeEl.textContent  = d.host_type === 'office' ? '🏢 Office' : '🏘 Residential';
+                ? ' <a href="tel:' + d.phone + '" style="color:var(--teal);font-weight:600;">' + d.phone + '</a>'
+                : ' No phone on file';
+            typeEl.textContent  = d.host_type === 'office' ? ' Office' : ' Residential';
             box.style.display   = 'block';
         }).catch(function(){ box.style.display='none'; });
 }
