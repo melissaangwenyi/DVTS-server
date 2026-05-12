@@ -263,7 +263,7 @@
                         <form method="POST" action="/checkout"
                               onsubmit="return confirm('Check out {{ v.full_name }}?')">
                             <input type="hidden" name="log_uuid" value="{{ v.local_uuid }}">
-                            <button type="submit" class="btn btn-sm">✓ Out</button>
+                            <button type="submit" class="btn btn-sm">Check Out</button>
                         </form>
                         {% if session.get('role') == 'admin' %}
                         <button type="button" class="btn btn-sm btn-secondary edit-visit-btn"
@@ -272,7 +272,7 @@
                                 data-nid="{{ v.national_id or '' }}"
                                 data-reason="{{ v.reason_for_visit or '' }}"
                                 data-unit="{{ v.host_unit or '' }}">
-                            
+                            Edit
                         </button>
                         {% endif %}
                     </td>
@@ -331,7 +331,7 @@
         </div>
 
         <div class="action-bar" style="margin-top:16px;">
-            <a href="{{ url_for('dashboard', unit=unit_filter) if unit_filter else url_for('dashboard') }}" class="refresh-btn">🔄 Refresh</a>
+            <a href="{{ url_for('dashboard', unit=unit_filter) if unit_filter else url_for('dashboard') }}" class="refresh-btn"> Refresh</a>
         </div>
     </div>
 
@@ -512,7 +512,7 @@ function buildPaxFields(count) {
 <!-- EDIT VISIT MODAL (admin only) -->
 <div id="edit-visit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;">✏️ Correct visit record</h3>
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;"> Correct visit record</h3>
         <p style="font-size:12px;color:var(--text-muted);margin-bottom:18px;">Admin correction — this action will be audited.</p>
         <form id="edit-visit-form" method="POST">
             <label>Full name *</label>
