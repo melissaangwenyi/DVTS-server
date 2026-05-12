@@ -32,6 +32,7 @@
 <div class="navbar">
     <a href="/dashboard" class="active"> Dashboard</a>
     <a href="/reports"> Reports</a>
+    {% if session.get('role') == 'admin' %}
     <a href="/manage-guards"> Guards</a>
     <a href="/manage-hosts"> Hosts</a>
     <a href="/blacklist"> Blacklist</a>
