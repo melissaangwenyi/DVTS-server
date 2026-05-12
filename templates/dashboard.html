@@ -51,7 +51,7 @@
 
     <!-- ── LEFT: CHECK-IN FORM ── -->
     <div class="left-panel">
-        <div class="panel-header">➕ Check in visitor</div>
+        <div class="panel-header"> Check in visitor</div>
         <div class="form-body">
             <form method="POST" action="/checkin" id="checkinForm" autocomplete="off">
 
@@ -104,7 +104,7 @@
                 </select>
                 <!-- Host contact info — shown after unit is selected -->
                 <div id="host-info-box" style="display:none;background:var(--teal-soft);border:1px solid #B8E5D6;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:14px;font-size:12px;">
-                    <div style="font-weight:600;color:var(--teal-deep);margin-bottom:4px;"> Host details</div>
+                    <div style="font-weight:600;color:var(--teal-deep);margin-bottom:4px;">📋 Host details</div>
                     <div id="host-info-name" style="color:var(--teal-deep);"></div>
                     <div id="host-info-phone" style="color:var(--teal-deep);margin-top:2px;"></div>
                     <div id="host-info-type" style="color:var(--text-muted);font-size:11px;margin-top:2px;"></div>
@@ -259,14 +259,23 @@
                     <td style="white-space:nowrap;">{{ v.entry_display }}</td>
                     <td style="white-space:nowrap;">{{ v.duration }}</td>
                     <td style="font-size:11px;color:var(--text-muted);">{{ v.checkin_guard_name or '—' }}</td>
-                    <td onclick="event.stopPropagation();" style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <form method="POST" action="/checkout"
+                    <td onclick="event.stopPropagation();" style="white-space:nowrap;">
+                        <form method="POST" action="/checkout" style="display:inline;"
                               onsubmit="return confirm('Check out {{ v.full_name }}?')">
                             <input type="hidden" name="log_uuid" value="{{ v.local_uuid }}">
-                            <button type="submit" class="btn btn-sm">Check Out</button>
+                            <button type="submit" class="btn btn-sm" style="font-size:12px;padding:5px 14px;">
+                                Check Out
+                            </button>
                         </form>
                         {% if session.get('role') == 'admin' %}
-                        <button type="button" class="btn btn-sm btn-secondary edit-visit-btn"
+                        <button type="button"
+                                class="edit-visit-btn"
+                                style="margin-left:6px;padding:4px 10px;font-size:11px;
+                                       border:1px solid var(--border);border-radius:var(--radius-sm);
+                                       background:transparent;color:var(--text-muted);
+                                       cursor:pointer;vertical-align:middle;"
+                                onmouseover="this.style.borderColor='var(--teal)';this.style.color='var(--teal)';"
+                                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)';"
                                 data-uuid="{{ v.local_uuid }}"
                                 data-name="{{ v.full_name }}"
                                 data-nid="{{ v.national_id or '' }}"
@@ -313,7 +322,7 @@
                             </div>
                             <div class="drawer-field">
                                 <span class="df-label">Entry type</span>
-                                <span class="df-value">{{ '⚠ Zero-trust (no ID)' if v.exception_flag else '✓ Standard' }}</span>
+                                <span class="df-value">{{ '❕ Zero-trust (no ID)' if v.exception_flag else '✓ Standard' }}</span>
                             </div>
                         </div>
                     </td>
@@ -323,7 +332,7 @@
         </table>
         {% else %}
         <div class="no-data">
-            
+
             {% if unit_filter %}No visitors in <strong>{{ unit_filter }}</strong>.
             {% else %}No visitors currently on premises.{% endif %}
         </div>
@@ -413,7 +422,7 @@ function loadHostInfo(unit) {
         .then(function(r){ return r.json(); })
         .then(function(d) {
             if (!d.found) { box.style.display='none'; return; }
-            nameEl.textContent  =  d.name;
+            nameEl.textContent  = '👤 ' + d.name;
             phoneEl.innerHTML   = d.phone
                 ? ' <a href="tel:' + d.phone + '" style="color:var(--teal);font-weight:600;">' + d.phone + '</a>'
                 : ' No phone on file';
