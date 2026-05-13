@@ -313,8 +313,12 @@
                             </div>
                             <div class="drawer-field">
                                 <span class="df-label">Entry type</span>
-                                <span class="df-value">{{ '⚠ Zero-trust (no ID)' if v.exception_flag else '✓ Standard' }}</span>
+                                <span class="df-value">{{ '❕ Zero-trust (no ID)' if v.exception_flag else '✓ Standard' }}</span>
                             </div>
+                            <div class="drawer-field">
+    <span class="df-label">Visiting unit</span>
+    <span class="df-value">{{ v.host_unit or '—' }}</span>
+</div>
                         </div>
                     </td>
                 </tr>
