@@ -54,18 +54,19 @@
         <button class="theme-toggle" aria-label="Toggle dark mode">
             <span class="icon-moon">🌙</span><span class="icon-sun">☀</span>
         </button>
-        <span class="guard-pill"> {{ session.guard_name }}</span>
-        <a href="/logout" class="logout"> Logout</a>
+        <span class="guard-pill">👮 {{ session.guard_name }}</span>
+        <a href="/logout" class="logout">🔒 Logout</a>
     </div>
 </div>
 
 <div class="navbar">
-    <a href="/dashboard"> Dashboard</a>
-    <a href="/reports"> Reports</a>
-    <a href="/manage-guards"> Guards</a>
-    <a href="/manage-hosts" class="active"> Hosts</a>
-    <a href="/blacklist"> Blacklist</a>
-    <a href="/audit-log"> Audit log</a>
+    <a href="/dashboard">🏠 Dashboard</a>
+    <a href="/reports">📊 Reports</a>
+    <a href="/pre-registrations">📋 Pre-register</a>
+    <a href="/manage-guards">👮 Guards</a>
+    <a href="/manage-hosts" class="active">🏡 Hosts</a>
+    <a href="/blacklist">⛔ Blacklist</a>
+    <a href="/audit-log">📜 Audit log</a>
 </div>
 
 <div class="content">
@@ -148,7 +149,7 @@
                                         data-pin="{{ host.host_pin }}"
                                         data-phone="{{ host.phone or '' }}"
                                         data-type="{{ host.host_type or 'residential' }}">
-                                     Edit
+                                    ✏️ Edit
                                 </button>
                         </tr>
                         {% endfor %}
@@ -159,7 +160,7 @@
 
         <!-- ADD HOST FORM -->
         <div class="card">
-            <div class="card-header"><h2> Add host</h2></div>
+            <div class="card-header"><h2>➕ Add host</h2></div>
             <div class="card-body">
                 <div class="modal-error" id="add-host-error"></div>
 
@@ -180,9 +181,9 @@
                 <input type="text" id="ah_pin" placeholder="e.g. 1234"
                        oninput="enforcePIN(this)">
 
-                <label>Phone</label>
+                <label>Phone * (required for host verification)</label>
                 <input type="text" id="ah_phone" placeholder="e.g. 0712345678"
-                       oninput="enforceDigits(this)">
+                       required oninput="enforceDigits(this)">
 
                 <button class="btn" onclick="addHost()">➕ Add host</button>
 
@@ -201,7 +202,7 @@
 <!-- EDIT HOST MODAL -->
 <div class="modal-overlay" id="edit-host-modal">
     <div class="modal-box">
-        <div class="modal-title"> Edit host</div>
+        <div class="modal-title">✏️ Edit host</div>
         <div class="modal-error" id="edit-host-error"></div>
         <input type="hidden" id="eh_id">
         <label>Full name *</label>
@@ -210,13 +211,13 @@
         <input type="text" id="eh_unit">
         <label>Type *</label>
         <select id="eh_type">
-            <option value="residential"> Residential</option>
-            <option value="office"> Office</option>
+            <option value="residential">🏘 Residential</option>
+            <option value="office">🏢 Office</option>
         </select>
         <label>Host PIN * (numbers only, min 4)</label>
         <input type="text" id="eh_pin" oninput="enforcePIN(this)">
-        <label>Phone</label>
-        <input type="text" id="eh_phone" oninput="enforceDigits(this)">
+        <label>Phone * (required)</label>
+        <input type="text" id="eh_phone" required oninput="enforceDigits(this)">
         <div class="modal-actions">
             <button class="btn" onclick="saveHostEdit()">Save changes</button>
             <button class="btn btn-secondary" onclick="closeModal('edit-host-modal')">Cancel</button>
@@ -277,24 +278,26 @@ document.addEventListener('click', function(e) {
 function toggleHost(id, isActive, btn) {
     var action = isActive ? 'Deactivate' : 'Activate';
     if (!confirm(action + ' this host. Are you sure?')) return;
+    btn.disabled = true; btn.style.opacity = '0.6';
     fetch('/api/host/toggle/' + id, {method:'POST', headers:{'Content-Type':'application/json'}})
     .then(function(r){ return r.json(); })
     .then(function(d) {
+        btn.disabled = false; btn.style.opacity = '';
         if (!d.ok) { showToast('Toggle failed.', 'error'); return; }
         var row = document.getElementById('host-row-' + id);
         var statusCell = row.querySelector('.h-status');
         if (d.active) {
             statusCell.innerHTML = '<span class="badge badge-status-active">● Active</span>';
             btn.textContent = 'Deactivate';
-            btn.setAttribute('onclick', 'toggleHost(' + id + ', true, this)');
+            btn.dataset.active = 'true';
         } else {
             statusCell.innerHTML = '<span class="badge badge-status-inactive">○ Inactive</span>';
             btn.textContent = 'Activate';
-            btn.setAttribute('onclick', 'toggleHost(' + id + ', false, this)');
+            btn.dataset.active = 'false';
         }
         showToast('Host ' + (d.active ? 'activated' : 'deactivated') + '.', 'success');
     })
-    .catch(function(){ showToast('Request failed.', 'error'); });
+    .catch(function(){ btn.disabled = false; btn.style.opacity = ''; showToast('Request failed.', 'error'); });
 }
 
 /* ── EDIT HOST ── */

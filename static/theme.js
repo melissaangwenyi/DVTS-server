@@ -93,3 +93,48 @@
     // Expose for the "Stay logged in" button
     window.resetTimers = resetTimers;
 })();
+
+/* ── GLOBAL DOUBLE-CLICK / DOUBLE-SUBMIT PROTECTION ──────────────────────
+   Prevents any button or form from firing twice due to slow responses.
+   Applied to every page automatically via theme.js.
+──────────────────────────────────────────────────────────────────────── */
+(function() {
+    // Track in-flight AJAX fetch calls by URL
+    var _inflight = {};
+
+    // Override fetch globally to prevent duplicate calls to same URL
+    var _origFetch = window.fetch;
+    window.fetch = function(url, opts) {
+        var method = (opts && opts.method) ? opts.method.toUpperCase() : 'GET';
+        // Only gate POST/mutating requests
+        if (method !== 'GET') {
+            var key = method + ':' + url;
+            if (_inflight[key]) {
+                // Already in flight — return a rejected promise silently
+                return Promise.reject(new Error('duplicate_request'));
+            }
+            _inflight[key] = true;
+            return _origFetch.apply(this, arguments).finally(function() {
+                delete _inflight[key];
+            });
+        }
+        return _origFetch.apply(this, arguments);
+    };
+
+    // Disable form submit buttons immediately on submit (prevents double POST)
+    document.addEventListener('submit', function(e) {
+        var form = e.target;
+        // Skip checkin and checkout — they have their own handlers
+        if (form.id === 'checkinForm') return;
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn && !btn.disabled) {
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            // Re-enable after 5s as safety net in case page doesn't navigate
+            setTimeout(function() {
+                btn.disabled = false;
+                btn.style.opacity = '';
+            }, 5000);
+        }
+    }, true);
+})();

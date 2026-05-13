@@ -20,17 +20,44 @@ import os
 import hashlib
 import psycopg2
 import psycopg2.extras
+from psycopg2 import pool as psycopg2_pool
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
+# ── CONNECTION POOL ──────────────────────────────────────────────────────────
+# Keeps 2-10 persistent connections alive between requests.
+# Eliminates 100-300ms TCP handshake overhead on every request.
+_pool = None
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        if not DATABASE_URL:
+            raise RuntimeError("DATABASE_URL environment variable is not set.")
+        _pool = psycopg2_pool.ThreadedConnectionPool(
+            minconn=2,
+            maxconn=10,
+            dsn=DATABASE_URL,
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
+    return _pool
+
 
 def get_connection():
+    """Borrows a connection from the pool. Call .close() to return it."""
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL environment variable is not set.")
-    return psycopg2.connect(
-        DATABASE_URL,
-        cursor_factory=psycopg2.extras.RealDictCursor,
-    )
+    return _get_pool().getconn()
+
+
+def return_connection(conn, error=False):
+    """Return a connection to the pool. Call after every get_connection()."""
+    try:
+        if error:
+            conn.rollback()
+        _get_pool().putconn(conn)
+    except Exception:
+        pass
 
 
 # ── SCHEMA ─────────────────────────────────────────────────────────────────
@@ -201,7 +228,7 @@ def init_server_db():
 
     conn.commit()
     cur.close()
-    conn.close()
+    return_connection(conn)
     print("[ServerDB] Tables verified/created successfully.")
 
 
@@ -224,7 +251,7 @@ def record_audit(actor_guard_id, actor_name: str, action: str,
         """, (actor_guard_id, actor_name, action, target, details, ip_address))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[Audit] record_audit error: {e}")
@@ -254,7 +281,7 @@ def get_audit_log(limit: int = 200, action_filter: str = None,
         cur.execute(query, params)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[Audit] get_audit_log error: {e}")
@@ -277,7 +304,7 @@ def check_blacklist(national_id: str):
         """, (national_id,))
         row = cur.fetchone()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return dict(row) if row else None
     except Exception as e:
         print(f"[Blacklist] check error: {e}")
@@ -301,7 +328,7 @@ def add_blacklist(national_id: str, full_name: str,
         """, (national_id, full_name, reason, added_by))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[Blacklist] add error: {e}")
@@ -319,7 +346,7 @@ def remove_blacklist(blacklist_id: int) -> bool:
         )
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[Blacklist] remove error: {e}")
@@ -340,7 +367,7 @@ def get_all_blacklist() -> list:
         """)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[Blacklist] get_all error: {e}")
@@ -369,7 +396,7 @@ def find_visitor_by_national_id(national_id: str):
         """, (national_id,))
         row = cur.fetchone()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return dict(row) if row else None
     except Exception as e:
         print(f"[ServerDB] find_visitor error: {e}")
@@ -394,7 +421,7 @@ def get_host_by_unit(unit_number: str):
         """, (unit_number,))
         row = cur.fetchone()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return dict(row) if row else None
     except Exception as e:
         print(f"[ServerDB] get_host_by_unit error: {e}")
@@ -448,7 +475,7 @@ def upsert_visit(data: dict) -> bool:
 
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] upsert_visit error: {e}")
@@ -466,7 +493,7 @@ def upsert_passenger(log_uuid: str, national_id: str, full_name: str = None) -> 
         """, (log_uuid, national_id, full_name or None))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] upsert_passenger error: {e}")
@@ -489,7 +516,7 @@ def web_checkout(log_uuid: str, guard_id: int = None) -> bool:
         conn.commit()
         rows = cur.rowcount
         cur.close()
-        conn.close()
+        return_connection(conn)
         return rows > 0
     except Exception as e:
         print(f"[ServerDB] web_checkout error: {e}")
@@ -508,7 +535,7 @@ def get_visit_for_audit(log_uuid: str):
         """, (log_uuid,))
         row = cur.fetchone()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return dict(row) if row else None
     except Exception:
         return None
@@ -554,7 +581,7 @@ def get_active_visits_server(host_unit_filter: str = None) -> list:
         cur.execute(query, params)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_active_visits error: {e}")
@@ -622,7 +649,7 @@ def get_filtered_history(category: str = None,
         cur.execute(query, params)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_filtered_history error: {e}")
@@ -648,7 +675,7 @@ def get_stats_server() -> dict:
         """)
         by_cat = {row["category"]: row["cnt"] for row in cur.fetchall()}
         cur.close()
-        conn.close()
+        return_connection(conn)
         return {"total": total, "today": today, "active": active,
                 "by_category": by_cat}
     except Exception as e:
@@ -670,7 +697,7 @@ def get_active_units() -> list:
         """)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [r["u"] for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_active_units error: {e}")
@@ -687,7 +714,7 @@ def clear_all_hosts() -> bool:
         cur.execute("DELETE FROM residents")
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] clear_all_hosts error: {e}")
@@ -704,7 +731,7 @@ def clear_all_visits() -> bool:
         cur.execute("DELETE FROM visitors")
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] clear_all_visits error: {e}")
@@ -730,7 +757,7 @@ def add_pre_registration(resident_id, host_unit, visitor_name,
               reason or None, added_by))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] add_pre_registration error: {e}")
@@ -761,7 +788,7 @@ def get_pre_registrations(host_unit=None, visit_date=None,
         cur.execute(query, params)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_pre_registrations error: {e}")
@@ -790,7 +817,7 @@ def check_pre_registration(national_id: str, visit_date: str) -> dict:
         """, (national_id, visit_date))
         row = cur.fetchone()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return dict(row) if row else None
     except Exception as e:
         print(f"[ServerDB] check_pre_registration error: {e}")
@@ -808,7 +835,7 @@ def mark_pre_registration_used(pr_id: int) -> bool:
         """, (pr_id,))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] mark_pre_registration_used error: {e}")
@@ -822,7 +849,7 @@ def delete_pre_registration(pr_id: int) -> bool:
         cur.execute("DELETE FROM pre_registrations WHERE id=%s", (pr_id,))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] delete_pre_registration error: {e}")
@@ -850,7 +877,7 @@ def get_recent_checkouts(limit: int = 10) -> list:
         """)
         all_rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         # Sort by check_out_time descending AFTER deduplication, take top N
         sorted_rows = sorted(
             [dict(r) for r in all_rows],
@@ -880,7 +907,7 @@ def find_visitor_by_national_id(national_id: str):
         """, (national_id,))
         row = cur.fetchone()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return dict(row) if row else None
     except Exception as e:
         print(f"[ServerDB] find_visitor error: {e}")
@@ -901,7 +928,7 @@ def verify_guard_web(username: str, password: str):
         """, (username, hashed))
         guard = cur.fetchone()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return dict(guard) if guard else None
     except Exception as e:
         print(f"[ServerDB] verify_guard_web error: {e}")
@@ -920,7 +947,7 @@ def get_all_guards_server() -> list:
         """)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_all_guards error: {e}")
@@ -939,7 +966,7 @@ def add_guard_server(username: str, password: str,
         """, (username, full_name, hashed, role))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except psycopg2.IntegrityError:
         return False
@@ -961,7 +988,7 @@ def toggle_guard_server(guard_id: int, requesting_guard_id: int = None):
         result = cur.fetchone()
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return bool(result["is_active"]) if result else None
     except Exception as e:
         print(f"[ServerDB] toggle_guard error: {e}")
@@ -977,7 +1004,7 @@ def reset_guard_password_server(guard_id: int, new_password: str) -> bool:
                     (hashed, guard_id))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] reset_guard_password error: {e}")
@@ -997,7 +1024,7 @@ def get_all_residents_server() -> list:
         """)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_all_residents error: {e}")
@@ -1016,7 +1043,7 @@ def get_active_hosts_for_dropdown() -> list:
         """)
         rows = cur.fetchall()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return [dict(r) for r in rows]
     except Exception as e:
         print(f"[ServerDB] get_active_hosts_for_dropdown error: {e}")
@@ -1040,13 +1067,13 @@ def add_resident_server(full_name: str, unit_number: str,
               host_type, host_email or None))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except psycopg2.IntegrityError as e:
         print(f"[ServerDB] add_resident IntegrityError: {e}")
         try:
             conn.rollback()
-            conn.close()
+            return_connection(conn)
         except Exception:
             pass
         return False
@@ -1054,7 +1081,7 @@ def add_resident_server(full_name: str, unit_number: str,
         print(f"[ServerDB] add_resident error: {e}")
         try:
             conn.rollback()
-            conn.close()
+            return_connection(conn)
         except Exception:
             pass
         return False
@@ -1085,7 +1112,7 @@ def update_resident_server(resident_id: int, full_name: str,
                   host_email or None, resident_id))
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return True
     except Exception as e:
         print(f"[ServerDB] update_resident error: {e}")
@@ -1103,7 +1130,7 @@ def toggle_resident_server(resident_id: int) -> bool:
         result = cur.fetchone()
         conn.commit()
         cur.close()
-        conn.close()
+        return_connection(conn)
         return bool(result["is_active"]) if result else False
     except Exception as e:
         print(f"[ServerDB] toggle_resident error: {e}")
