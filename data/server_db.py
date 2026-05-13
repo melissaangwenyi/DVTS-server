@@ -831,7 +831,7 @@ def delete_pre_registration(pr_id: int) -> bool:
 
 
 def get_recent_checkouts(limit: int = 10) -> list:
-    """Last N checked-out visitors for the recent visitors panel."""
+    """Last N unique checked-out visitors sorted by most recent checkout."""
     try:
         conn = get_connection()
         cur  = conn.cursor()
@@ -847,12 +847,17 @@ def get_recent_checkouts(limit: int = 10) -> list:
             WHERE vl.check_out_time IS NOT NULL
               AND v.national_id IS NOT NULL
             ORDER BY v.national_id, vl.check_out_time DESC
-            LIMIT %s
-        """, (limit,))
-        rows = cur.fetchall()
+        """)
+        all_rows = cur.fetchall()
         cur.close()
         conn.close()
-        return [dict(r) for r in rows]
+        # Sort by check_out_time descending AFTER deduplication, take top N
+        sorted_rows = sorted(
+            [dict(r) for r in all_rows],
+            key=lambda r: r['check_out_time'] or '',
+            reverse=True
+        )
+        return sorted_rows[:limit]
     except Exception as e:
         print(f"[ServerDB] get_recent_checkouts error: {e}")
         return []
