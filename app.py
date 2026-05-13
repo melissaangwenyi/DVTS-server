@@ -930,6 +930,18 @@ def db_status():
                 🗑 Remove blank/invalid PIN rows
             </button>
         </form>
+        <form action="/admin/purge-phantom-hosts" method="POST" style="display:inline;">
+            <button class="btn" style="background:#8B0000;"
+                    onclick="return confirm('Remove duplicate phantom host rows?')">
+                Purge phantom hosts
+            </button>
+        </form>
+        <form action="/admin/restore-hosts" method="POST" style="display:inline;">
+            <button class="btn" style="background:#185FA5;"
+                    onclick="return confirm('Restore 7 default hosts? Visit data will NOT be touched.')">
+                🏡 Restore default hosts
+            </button>
+        </form>
         <form action="/admin/fix-pin-constraint" method="POST" style="display:inline;">
             <button class="btn" style="background:#185FA5;" onclick="return confirm('Rebuild PIN unique index?')">
                 🔧 Rebuild PIN constraint
@@ -1606,6 +1618,79 @@ def api_host_info():
         "phone":      host.get("phone", "") or "",
         "host_type":  host.get("host_type", "residential"),
     })
+
+
+@app.route("/admin/restore-hosts", methods=["POST"])
+@admin_required
+def restore_hosts():
+    """Restore the 7 default hosts without touching any visit data."""
+    from data.server_db import get_connection, return_connection
+    hosts = [
+        ("Dr. James Mwangi",    "A-101",     "residential", "1234", "0712000001"),
+        ("Prof. Grace Otieno",  "A-102",     "residential", "5678", "0712000002"),
+        ("Mr. Peter Kamau",     "B-201",     "residential", "2468", "0712000003"),
+        ("Acme Technologies",   "Suite 301", "office",      "9999", "0700100001"),
+        ("Nairobi Consultants", "Suite 402", "office",      "7777", "0700100002"),
+        ("HR Department",       "Suite 101", "office",      "4321", "0700100003"),
+        ("Melissa Angwenyi",    "B-203",     "residential", "1111", "0799887766"),
+    ]
+    added = 0
+    skipped = 0
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        for (name, unit, htype, pin, phone) in hosts:
+            # Skip if PIN or unit already exists
+            cur.execute("SELECT 1 FROM residents WHERE host_pin=%s OR unit_number=%s", (pin, unit))
+            if cur.fetchone():
+                skipped += 1
+                continue
+            cur.execute("""
+                INSERT INTO residents (full_name, unit_number, host_pin, phone, host_type, is_active)
+                VALUES (%s,%s,%s,%s,%s,TRUE)
+                ON CONFLICT (host_pin) DO NOTHING
+            """, (name, unit, pin, phone, htype))
+            if cur.rowcount > 0:
+                added += 1
+            else:
+                skipped += 1
+        conn.commit()
+        cur.close()
+        return_connection(conn)
+        _audit("RESTORE_HOSTS", details=f"Added {added}, skipped {skipped} (already existed)")
+        flash(f"Done — {added} host(s) added, {skipped} already existed. Visit data untouched.", "success")
+    except Exception as e:
+        flash(f"Restore failed: {e}", "error")
+    return redirect(url_for("manage_hosts"))
+
+
+@app.route("/admin/purge-phantom-hosts", methods=["POST"])
+@admin_required  
+def purge_phantom_hosts():
+    """Remove duplicate/phantom host rows that aren't showing up due to connection issues."""
+    from data.server_db import get_connection
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        # Show what's actually in the table
+        cur.execute("SELECT resident_id, full_name, unit_number, host_pin FROM residents ORDER BY resident_id")
+        all_rows = cur.fetchall()
+        # Delete duplicates keeping lowest resident_id per unit
+        cur.execute("""
+            DELETE FROM residents
+            WHERE resident_id NOT IN (
+                SELECT MIN(resident_id) FROM residents GROUP BY unit_number
+            )
+        """)
+        deleted = cur.rowcount
+        conn.commit()
+        cur.close()
+        conn.close()
+        _audit("PURGE_PHANTOM_HOSTS", details=f"Removed {deleted} duplicate rows")
+        flash(f"Purged {deleted} duplicate host row(s). All hosts now visible.", "success")
+    except Exception as e:
+        flash(f"Purge failed: {e}", "error")
+    return redirect(url_for("db_status"))
 
 # ── STARTUP ───────────────────────────────────────────────────────────────
 
