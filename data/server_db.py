@@ -16,7 +16,7 @@ def get_connection():
     )
 
 
-# ── SCHEMA ─────────────────────────────────────────────────────────────────
+#  SCHEMA 
 
 def init_server_db():
     conn = get_connection()
@@ -188,7 +188,7 @@ def init_server_db():
     print("[ServerDB] Tables verified/created successfully.")
 
 
-# ── AUDIT LOG ─────────────────────────────────────────────────────────────
+#  AUDIT LOG 
 
 def record_audit(actor_guard_id, actor_name: str, action: str,
                  target: str = None, details: str = None,
@@ -246,7 +246,7 @@ def get_audit_log(limit: int = 200, action_filter: str = None,
         return []
 
 
-# ── BLACKLIST ─────────────────────────────────────────────────────────────
+#  BLACKLIST 
 
 def check_blacklist(national_id: str):
     """Returns blacklist row dict if national_id is flagged, else None."""
@@ -336,7 +336,7 @@ def get_all_blacklist() -> list:
         return []
 
 
-# ── REPEAT VISITOR AUTOFILL ───────────────────────────────────────────────
+#  REPEAT VISITOR AUTOFILL 
 
 def find_visitor_by_national_id(national_id: str):
     """
@@ -366,7 +366,7 @@ def find_visitor_by_national_id(national_id: str):
         return None
 
 
-# ── HOST EMAIL LOOKUP (for notification) ──────────────────────────────────
+#  HOST EMAIL LOOKUP (for notification)  
 
 def get_host_by_unit(unit_number: str):
     """Returns the active host record for a unit (used for email notifications)."""
@@ -392,7 +392,7 @@ def get_host_by_unit(unit_number: str):
         return None
 
 
-# ── WRITE OPERATIONS ──────────────────────────────────────────────────────
+#  WRITE OPERATIONS  
 
 def upsert_visit(data: dict) -> bool:
     try:
@@ -508,7 +508,7 @@ def get_visit_for_audit(log_uuid: str):
         return None
 
 
-# ── READ OPERATIONS ───────────────────────────────────────────────────────
+#  READ OPERATIONS 
 
 def get_active_visits_server(host_unit_filter: str = None) -> list:
     try:
@@ -712,7 +712,7 @@ def clear_all_visits() -> bool:
 
 
 
-# ── PRE-REGISTRATION ──────────────────────────────────────────────────────
+#  PRE-REGISTRATION 
 
 def add_pre_registration(resident_id, host_unit, visitor_name,
                          national_id, visit_date, time_from,
@@ -894,7 +894,7 @@ def find_visitor_by_national_id(national_id: str):
         return None
 
 
-# ── AUTH ──────────────────────────────────────────────────────────────────
+#  AUTH 
 
 def verify_guard_web(username: str, password: str):
     hashed = hashlib.sha256(password.encode()).hexdigest()
@@ -916,7 +916,7 @@ def verify_guard_web(username: str, password: str):
         return None
 
 
-# ── GUARD MANAGEMENT ──────────────────────────────────────────────────────
+#  GUARD MANAGEMENT 
 
 def get_all_guards_server() -> list:
     try:

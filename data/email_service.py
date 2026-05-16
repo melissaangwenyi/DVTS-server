@@ -63,7 +63,7 @@ def send_host_notification(
 
     c = _config()
 
-    # ── Build message ──────────────────────────────────────────────────
+    #  Build message 
     subject   = f"Visitor arrived: {visitor_name}"
     text_body = (
         f"Hello {host_name},\n\n"
@@ -114,10 +114,10 @@ def send_host_notification(
     msg.attach(MIMEText(text_body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
-    # ── Encode as base64url (Gmail API requirement) ────────────────────
+    #  Encode as base64url (Gmail API requirement) 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
 
-    # ── POST to Gmail REST API using App Password (Basic Auth) ─────────
+    #  POST to Gmail REST API using App Password (Basic Auth) 
     credentials = base64.b64encode(
         f"{c['user']}:{c['password']}".encode()
     ).decode("utf-8")

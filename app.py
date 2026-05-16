@@ -32,7 +32,7 @@ from flask import (
     jsonify, Response,
 )
 
-# ── Local package resolution ─────────────────────────────────────────────
+#  Local package resolution 
 # Railway deploys to /app so __file__ == /app/app.py  and data/ is /app/data/
 # Locally __file__ may be /something/server/app.py    and data/ is /something/server/data/
 # In both cases os.path.dirname(__file__) is correct — we just insert it
@@ -81,8 +81,7 @@ except Exception as e:
     print(f"[Startup] DB init warning: {e}")
 
 
-# ── DECORATORS ─────────────────────────────────────────────────────────────
-
+#DECORATORS 
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -104,7 +103,7 @@ def admin_required(f):
     return decorated
 
 
-# ── HELPERS ────────────────────────────────────────────────────────────────
+#  HELPERS 
 
 def duration_str(check_in_str, check_out_str=None) -> str:
     try:
@@ -163,7 +162,7 @@ def _audit(action, target=None, details=None):
         print(f"[Audit] _audit wrapper error: {e}")
 
 
-# ── AUTH ──────────────────────────────────────────────────────────────────
+#  AUTH 
 
 @app.route("/")
 def index():
@@ -221,7 +220,7 @@ def logout():
     return redirect(url_for("login"))
 
 
-# ── DASHBOARD ─────────────────────────────────────────────────────────────
+#  DASHBOARD  
 
 @app.route("/dashboard")
 @login_required
@@ -249,7 +248,7 @@ def dashboard():
     )
 
 
-# ── AUTOFILL API ──────────────────────────────────────────────────────────
+#  AUTOFILL API 
 
 @app.route("/api/lookup-visitor")
 @login_required
@@ -292,7 +291,7 @@ def lookup_visitor():
     return jsonify(payload)
 
 
-# ── CHECK-IN ──────────────────────────────────────────────────────────────
+#  CHECK-IN 
 
 @app.route("/checkin", methods=["POST"])
 @login_required
@@ -352,7 +351,7 @@ def checkin():
         flagged = check_blacklist(national_id)
         if flagged and not blacklist_override:
             flash(
-                f"⛔ BLOCKED: This visitor is on the blacklist. "
+                f" BLOCKED: This visitor is on the blacklist. "
                 f"Reason: {flagged['reason']}. "
                 f"Only an admin can override this by re-submitting with the override box ticked.",
                 "error",
@@ -458,7 +457,7 @@ def checkin():
     return redirect(url_for("dashboard"))
 
 
-# ── CHECK-OUT ─────────────────────────────────────────────────────────────
+#  CHECK-OUT 
 
 @app.route("/checkout", methods=["POST"])
 @login_required
@@ -482,7 +481,7 @@ def checkout():
     return redirect(url_for("dashboard"))
 
 
-# ── REPORTS ────────────────────────────────────────────────────────────────
+#  REPORTS  
 
 def _gather_report_filters():
     return {
@@ -570,7 +569,7 @@ def reports_export_csv():
     )
 
 
-# ── MANAGE GUARDS ─────────────────────────────────────────────────────────
+#  MANAGE GUARDS  
 
 @app.route("/manage-guards")
 @admin_required
@@ -642,7 +641,7 @@ def reset_guard_password(guard_id):
     return redirect(url_for("manage_guards"))
 
 
-# ── MANAGE HOSTS ──────────────────────────────────────────────────────────
+#  MANAGE HOSTS 
 
 @app.route("/manage-hosts")
 @admin_required
@@ -744,7 +743,7 @@ def manage_residents_legacy():
     return redirect(url_for("manage_hosts"))
 
 
-# ── BLACKLIST ─────────────────────────────────────────────────────────────
+#  BLACKLIST 
 
 @app.route("/blacklist")
 @admin_required
@@ -793,7 +792,7 @@ def blacklist_remove(bl_id):
     return redirect(url_for("blacklist"))
 
 
-# ── AUDIT LOG ─────────────────────────────────────────────────────────────
+#  AUDIT LOG 
 
 @app.route("/audit-log")
 @admin_required
@@ -836,7 +835,7 @@ def test_email():
     ) if not enabled else (
         "<div style='background:#D1FAE5;border:1px solid #34D399;border-radius:8px;"
         "padding:14px;margin-bottom:16px;font-size:13px;'>"
-        "<b>✅ Email notifications are ENABLED</b><br>"
+        "<b> Email notifications are ENABLED</b><br>"
         f"Sending from: {smtp_user}"
         "</div>"
     )
@@ -864,7 +863,7 @@ def test_email():
         ".btn{display:inline-block;padding:10px 18px;background:#008564;color:#fff;"
         "text-decoration:none;border-radius:6px;margin-top:16px;}"
         "</style></head><body>"
-        "<h2>📧 Email Notification Status</h2>"
+        "<h2> Email Notification Status</h2>"
         + status_box +
         "<h3>Host notification emails</h3>"
         "<table><tr><th>Host</th><th>Unit</th><th>Email on file</th></tr>"
@@ -927,7 +926,7 @@ def db_status():
         <br>
         <form action="/admin/db-purge-bad-pins" method="POST" style="display:inline;">
             <button class="btn" onclick="return confirm('Remove rows with blank/null PINs?')">
-                🗑 Remove blank/invalid PIN rows
+                 Remove blank/invalid PIN rows
             </button>
         </form>
         <form action="/admin/purge-phantom-hosts" method="POST" style="display:inline;">
@@ -939,23 +938,23 @@ def db_status():
         <form action="/admin/restore-hosts" method="POST" style="display:inline;">
             <button class="btn" style="background:#185FA5;"
                     onclick="return confirm('Restore 7 default hosts? Visit data will NOT be touched.')">
-                🏡 Restore default hosts
+                 Restore default hosts
             </button>
         </form>
         <form action="/admin/fix-pin-constraint" method="POST" style="display:inline;">
             <button class="btn" style="background:#185FA5;" onclick="return confirm('Rebuild PIN unique index?')">
-                🔧 Rebuild PIN constraint
+                 Rebuild PIN constraint
             </button>
         </form>
         <form action="/admin/reset-hosts" method="POST" style="display:inline;">
             <button class="btn btn-red" onclick="return confirm('Wipe ALL hosts?')">
-                🗑 Wipe ALL hosts
+                 Wipe ALL hosts
             </button>
         </form>
         <form action="/admin/full-reset-and-seed" method="POST" style="display:inline;">
             <button class="btn" style="background:#3B6D11;"
                     onclick="return confirm('Wipe ALL data and seed demo data? Cannot be undone.')">
-                🌱 Full reset + seed demo data
+                 Full reset + seed demo data
             </button>
         </form>
         <form action=\"/admin/reset-visits\" method=\"POST\" style=\"display:inline;\"><button class=\"btn\" style=\"background:#A32D2D;\" onclick=\"return confirm('Clear ALL visit data?')\">🗑 Clear all visit data</button></form>        <br><br><a href=\"/manage-hosts\" class=\"btn\">← Back to Hosts</a>
@@ -1183,7 +1182,7 @@ def reset_visits():
 
 
 
-# ── EDIT GUARD (admin) ────────────────────────────────────────────────────
+#  EDIT GUARD (admin) 
 
 @app.route("/manage-guards/edit/<int:guard_id>", methods=["POST"])
 @admin_required
@@ -1215,7 +1214,7 @@ def edit_guard(guard_id):
     return redirect(url_for("manage_guards"))
 
 
-# ── EDIT BLACKLIST ENTRY (admin) ──────────────────────────────────────────
+#  EDIT BLACKLIST ENTRY (admin) 
 
 @app.route("/blacklist/edit/<int:bl_id>", methods=["POST"])
 @admin_required
@@ -1247,7 +1246,7 @@ def blacklist_edit(bl_id):
     return redirect(url_for("blacklist"))
 
 
-# ── EDIT ACTIVE VISIT (admin only) ───────────────────────────────────────
+#  EDIT ACTIVE VISIT (admin only) 
 
 @app.route("/visit/edit/<log_uuid>", methods=["POST"])
 @admin_required
@@ -1297,7 +1296,7 @@ def edit_visit(log_uuid):
     return redirect(url_for("dashboard"))
 
 
-# ── AJAX API ENDPOINTS (return JSON, used by fetch() calls) ───────────────
+#  AJAX API ENDPOINTS (return JSON, used by fetch() calls) 
 
 @app.route("/api/guard/toggle/<int:guard_id>", methods=["POST"])
 @admin_required
@@ -1540,7 +1539,7 @@ def api_reports_data():
     return jsonify({"history": history, "count": len(history)})
 
 
-# ── PRE-REGISTRATION ──────────────────────────────────────────────────────
+#  PRE-REGISTRATION 
 
 @app.route("/pre-registrations")
 @login_required
@@ -1692,7 +1691,7 @@ def purge_phantom_hosts():
         flash(f"Purge failed: {e}", "error")
     return redirect(url_for("db_status"))
 
-# ── STARTUP ───────────────────────────────────────────────────────────────
+#  STARTUP 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

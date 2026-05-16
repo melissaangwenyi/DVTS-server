@@ -226,7 +226,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ── TOAST ── */
+/*  TOAST  */
 function showToast(msg, type) {
     var t = document.getElementById('toast');
     t.textContent = msg; t.className = 'toast ' + type;
@@ -238,7 +238,7 @@ document.querySelectorAll('.modal-overlay').forEach(function(el) {
     el.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 });
 
-/* ── CLIENT-SIDE FILTER ── */
+/* CLIENT-SIDE FILTER */
 function applyFilter() {
     var unit = document.getElementById('unit-filter').value.toLowerCase();
     var type = document.getElementById('type-filter').value.toLowerCase();
@@ -251,7 +251,7 @@ function applyFilter() {
     });
 }
 
-/* ── VALIDATION ── */
+/* VALIDATION */
 function enforceLetters(el) {
     el.value = el.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-'\/&.]/g, '');
 }
@@ -261,7 +261,7 @@ function enforcePIN(el) {
     el.style.borderColor = (el.value.length > 0 && el.value.length < 4) ? 'var(--red-strong)' : '';
 }
 
-/* ── EVENT DELEGATION ── */
+/*  EVENT DELEGATION  */
 document.addEventListener('click', function(e) {
     var toggleBtn = e.target.closest('.toggle-host-btn');
     if (toggleBtn) toggleHost(toggleBtn.dataset.id, toggleBtn.dataset.active === 'true', toggleBtn);
@@ -272,7 +272,7 @@ document.addEventListener('click', function(e) {
                                editBtn.dataset.phone, editBtn.dataset.type);
 });
 
-/* ── TOGGLE HOST ── */
+/*  TOGGLE HOST  */
 function toggleHost(id, isActive, btn) {
     var action = isActive ? 'Deactivate' : 'Activate';
     if (!confirm(action + ' this host. Are you sure?')) return;
@@ -298,7 +298,7 @@ function toggleHost(id, isActive, btn) {
     .catch(function(){ btn.disabled = false; btn.style.opacity = ''; showToast('Request failed.', 'error'); });
 }
 
-/* ── EDIT HOST ── */
+/*  EDIT HOST  */
 function openEditHost(id, name, unit, pin, phone, type) {
     document.getElementById('eh_id').value    = id;
     document.getElementById('eh_name').value  = name;
@@ -344,7 +344,7 @@ function saveHostEdit() {
     .catch(function(){ showToast('Request failed.', 'error'); });
 }
 
-/* ── ADD HOST ── */
+/*  ADD HOST  */
 function addHost() {
     var name  = document.getElementById('ah_name').value.trim();
     var unit  = document.getElementById('ah_unit').value.trim();
@@ -387,7 +387,7 @@ function addHost() {
     .catch(function(){ showToast('Request failed.', 'error'); });
 }
 
-/* ── DANGER ZONE ── */
+/*  DANGER ZONE  */
 function resetAllHosts() {
     fetch('/admin/reset-hosts', {method:'POST'})
     .then(function(){ window.location.reload(); });

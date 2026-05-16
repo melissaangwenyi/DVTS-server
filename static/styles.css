@@ -1,14 +1,13 @@
-/* =============================================================================
+/* 
    VTS — Visitor Tracking System (v2)
    Shared stylesheet — supports light AND dark modes via [data-theme="dark"]
 
    How dark mode works
-   -------------------
    The :root variables below define the LIGHT palette. The :root[data-theme="dark"]
    block at the end overrides the same variable names with dark equivalents.
    Every color in every page references these variables, so flipping the theme
    re-paints the whole app instantly.
-============================================================================= */
+ */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -96,7 +95,7 @@ body {
     transition: background 0.2s ease, color 0.2s ease;
 }
 
-/* ── TOP BAR ────────────────────────────────────────────────────────────── */
+/*  TOP BAR  */
 
 .topbar {
     background: var(--surface);
@@ -157,7 +156,7 @@ body {
     border-color: var(--border-strong);
 }
 
-/* ── THEME TOGGLE ────────────────────────────────────────────────────────── */
+/*  THEME TOGGLE  */
 
 .theme-toggle {
     background: var(--surface-alt);
@@ -184,7 +183,7 @@ body {
 :root[data-theme="dark"] .theme-toggle .icon-sun { display: inline; }
 :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
-/* ── NAVBAR ─────────────────────────────────────────────────────────────── */
+/*  NAVBAR  */
 
 .navbar {
     background: var(--bg);
@@ -210,7 +209,7 @@ body {
     box-shadow: 0 2px 6px rgba(0, 133, 100, 0.25);
 }
 
-/* ── FLASH MESSAGES ─────────────────────────────────────────────────────── */
+/*  FLASH MESSAGES  */
 
 .flash {
     margin: 14px 28px 0;
@@ -232,11 +231,11 @@ body {
 }
 .flash.error::before { content: '✕'; font-weight: 700; }
 
-/* ── CONTENT WRAPPER ────────────────────────────────────────────────────── */
+/*  CONTENT WRAPPER  */
 
 .content { padding: 24px 28px; }
 
-/* ── CARDS ──────────────────────────────────────────────────────────────── */
+/*  CARDS  */
 
 .card {
     background: var(--surface);
@@ -256,7 +255,7 @@ body {
 }
 .card-body { padding: 20px; }
 
-/* ── STAT CARDS ─────────────────────────────────────────────────────────── */
+/*  STAT CARDS  */
 
 .stats-row {
     display: grid;
@@ -293,7 +292,7 @@ body {
 .stat-card.tinted-red    { background: var(--red-soft); }
 .stat-card.tinted-red .value { color: var(--red-strong); }
 
-/* ── FORMS ──────────────────────────────────────────────────────────────── */
+/*  FORMS  */
 
 label {
     display: block;
@@ -391,7 +390,7 @@ input.error-field { border-color: var(--red-strong); background: var(--red-soft)
     margin-bottom: 6px; font-weight: 500;
 }
 
-/* ── BUTTONS ────────────────────────────────────────────────────────────── */
+/*  BUTTONS  */
 
 .btn {
     width: 100%;
@@ -449,7 +448,7 @@ input.error-field { border-color: var(--red-strong); background: var(--red-soft)
 .btn-danger { background: var(--red-strong); box-shadow: 0 2px 6px rgba(163, 45, 45, 0.2); }
 .btn-danger:hover { background: var(--red-strong); filter: brightness(0.9); }
 
-/* ── TABLES ─────────────────────────────────────────────────────────────── */
+/*  TABLES  */
 
 .table-wrap {
     background: var(--surface);
@@ -496,7 +495,7 @@ tbody tr.pax-detail-row td {
     border-bottom: 1px solid var(--border);
 }
 
-/* ── BADGES ─────────────────────────────────────────────────────────────── */
+/*  BADGES  */
 
 .badge {
     display: inline-block;
@@ -601,7 +600,7 @@ tbody tr.pax-detail-row td {
     letter-spacing: 0.4px;
 }
 
-/* ── LEGEND ─────────────────────────────────────────────────────────────── */
+/*  LEGEND  */
 
 .legend {
     background: var(--surface);
@@ -624,7 +623,7 @@ tbody tr.pax-detail-row td {
 .legend-dot.red    { background: var(--red-strong); }
 .legend-dot.amber  { background: var(--amber-strong); }
 
-/* ── FILTERS ────────────────────────────────────────────────────────────── */
+/*  FILTERS  */
 
 .filters {
     background: var(--surface);
@@ -678,7 +677,7 @@ tbody tr.pax-detail-row td {
     padding: 7px 14px;
 }
 
-/* ── DASHBOARD MAIN LAYOUT ──────────────────────────────────────────────── */
+/*  DASHBOARD MAIN LAYOUT  */
 
 .dashboard-main {
     display: grid;
@@ -756,7 +755,7 @@ tbody tr.pax-detail-row td {
     margin-left: auto;
 }
 
-/* ── ADMIN PAGES ────────────────────────────────────────────────────────── */
+/*  ADMIN PAGES  */
 
 .admin-grid {
     display: grid;
@@ -764,7 +763,7 @@ tbody tr.pax-detail-row td {
     gap: 20px;
 }
 
-/* ── CODE INLINE ────────────────────────────────────────────────────────── */
+/*  CODE INLINE  */
 
 code {
     background: var(--code-bg);
@@ -784,7 +783,7 @@ tr.self-row td:first-child::before {
     content: '👤 ';
 }
 
-/* ── MOBILE RESPONSIVE ──────────────────────────────────────────────────── */
+/*  MOBILE RESPONSIVE  */
 
 @media (max-width: 900px) {
     .dashboard-main, .admin-grid {
@@ -810,16 +809,14 @@ tr.self-row td:first-child::before {
     .navbar a { padding: 7px 12px; font-size: 12px; }
 }
 
-/* ── SCROLLBAR ──────────────────────────────────────────────────────────── */
+/*  SCROLLBAR  */
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--surface-alt); }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-/* =============================================================================
-   v3 ADDITIONS — autofill banner, blacklist alert, audit log, host type chip
-============================================================================= */
+/* v3 ADDITIONS — autofill banner, blacklist alert, audit log, host type chip */
 
 /* Autofill banner — shows when repeat visitor recognized */
 .autofill-banner {
@@ -950,7 +947,7 @@ tr.self-row td:first-child::before {
     color: #fff;
 }
 
-/* ── EXPANDABLE ROW DETAIL DRAWER ──────────────────────────────────────── */
+/*  EXPANDABLE ROW DETAIL DRAWER  */
 tbody tr.expandable { cursor: pointer; }
 tbody tr.expandable:hover td { background: var(--teal-soft); }
 tbody tr.expandable.expanded td { background: var(--teal-soft); }

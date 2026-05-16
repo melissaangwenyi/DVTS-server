@@ -190,7 +190,7 @@ document.querySelectorAll('.modal-overlay').forEach(function(el) {
 function enforceDigits(el) { el.value = el.value.replace(/\D/g, ''); }
 function enforceLetters(el) { el.value = el.value.replace(/[^a-zA-Z\u00C0-\u024F\s\-']/g, ''); }
 
-/* ── ADD ── */
+/*  ADD */
 function addBL() {
     var nid    = document.getElementById('abl_nid').value.trim();
     var name   = document.getElementById('abl_name').value.trim();
@@ -229,7 +229,7 @@ function addBL() {
     .catch(function(){ showToast('Request failed.', 'error'); });
 }
 
-/* ── EVENT DELEGATION FOR BUTTONS ── */
+/*  EVENT DELEGATION FOR BUTTONS */
 document.addEventListener('click', function(e) {
     var editBtn = e.target.closest('.edit-bl-btn');
     var removeBtn = e.target.closest('.remove-bl-btn');

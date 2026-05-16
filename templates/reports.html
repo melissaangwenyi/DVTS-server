@@ -264,7 +264,7 @@
 <script>
 var _debounceTimer = null;
 
-/* ── AJAX FILTER ── */
+/*  AJAX FILTER  */
 function fetchReports() {
     var params = new URLSearchParams();
     var cat      = document.getElementById('f-category').value;
@@ -313,7 +313,7 @@ function clearFilters() {
     fetchReports();
 }
 
-/* ── RENDER TABLE ROWS FROM JSON ── */
+/*  RENDER TABLE ROWS FROM JSON  */
 function renderTable(history) {
     var tbody  = document.getElementById('reports-tbody');
     var footer = document.getElementById('tbl-footer');
@@ -376,7 +376,7 @@ function esc(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/* ── DRAWER ── */
+/*  DRAWER  */
 function toggleDrawer(id, row) {
     var drawer = document.getElementById(id);
     if (!drawer) return;

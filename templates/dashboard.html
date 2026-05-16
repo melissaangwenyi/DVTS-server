@@ -48,7 +48,7 @@
 
 <div class="dashboard-main">
 
-    <!-- ── LEFT: CHECK-IN FORM ── -->
+    <!-- LEFT: CHECK-IN FORM -->
     <div class="left-panel">
         <div class="panel-header">➕ Check in visitor</div>
         <div class="form-body">
@@ -176,7 +176,7 @@
         </div>
     </div>
 
-    <!-- ── RIGHT: ACTIVE OCCUPANCY ── -->
+    <!-- RIGHT: ACTIVE OCCUPANCY -->
     <div class="right-panel">
         <div class="panel-header">
             <span> On premises</span>
@@ -342,7 +342,7 @@
 </div>
 
 <script>
-/* ── DRAWER ── */
+/* DRAWER */
 function toggleDrawer(id, row) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
@@ -356,7 +356,7 @@ function toggleDrawer(id, row) {
     }
 }
 
-/* ── AUTOFILL ── */
+/* AUTOFILL */
 var _lt = null;
 function maybeLookup(val) {
     var nid = (val||'').replace(/\D/g,'');
@@ -426,7 +426,7 @@ function loadHostInfo(unit) {
         }).catch(function(){ box.style.display='none'; });
 }
 
-/* ── VALIDATION ── */
+/*  VALIDATION  */
 function enforceDigits(input, errId) {
     var c=input.value.replace(/\D/g,'');
     if(input.value!==c){input.value=c;flash(input,errId);}
@@ -441,7 +441,7 @@ function flash(input, errId) {
     setTimeout(function(){input.classList.remove('error-field'); if(e) e.classList.remove('visible');},2500);
 }
 
-/* ── CATEGORY ── */
+/*  CATEGORY */
 function toggleCategory(sel) {
     var dur=document.getElementById('duration_section'),
         oth=document.getElementById('other_section'),
@@ -459,7 +459,7 @@ function toggleCategory(sel) {
     }
 }
 
-/* ── NO ID ── */
+/*  NO ID */
 function toggleNoId(cb) {
     var pin=document.getElementById('pin_section'), nid=document.getElementById('national_id');
     if(cb.checked){
@@ -469,7 +469,7 @@ function toggleNoId(cb) {
     } else { pin.classList.add('hidden'); nid.disabled=false; }
 }
 
-/* ── GROUP PAX ── */
+/*  GROUP PAX */
 function togglePaxSection(cb) {
     var s=document.getElementById('pax_section');
     if(cb.checked){s.classList.remove('hidden'); buildPaxFields(1);}
@@ -555,7 +555,7 @@ document.getElementById('edit-visit-modal').addEventListener('click', function(e
 
 <script>
 
-/* ── RECENT VISITOR QUICK FILL ── */
+/*  RECENT VISITOR QUICK FILL  */
 document.querySelectorAll('.recent-visitor-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
         var d = this.dataset;
@@ -575,7 +575,7 @@ document.querySelectorAll('.recent-visitor-btn').forEach(function(btn) {
     });
 });
 
-/* ── FORM PERSISTENCE — saves/restores check-in form state via localStorage ── */
+/*  FORM PERSISTENCE — saves/restores check-in form state via localStorage */
 var FORM_STORAGE_KEY = 'vts-checkin-form';
 
 var SAVED_FIELDS = [

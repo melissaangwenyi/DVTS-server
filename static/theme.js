@@ -1,10 +1,9 @@
-/* =============================================================================
+/* 
    theme.js — Light/Dark mode toggle
    - Reads saved preference from localStorage on every page load
    - Falls back to no preference (light) if nothing saved
    - Applies the theme as a [data-theme] attribute on <html>
-   - This script must run BEFORE the page paints to avoid a "flash of light"
-============================================================================= */
+   - This script must run BEFORE the page paints to avoid a "flash of light" */
 
 (function () {
     var STORAGE_KEY = 'vts-theme';
@@ -37,11 +36,11 @@
 })();
 
 
-/* ── SESSION TIMEOUT WARNING ──────────────────────────────────────────────
+/*  SESSION TIMEOUT WARNING  
    Shows a warning banner 5 minutes before the 30-minute session expires.
    The banner disappears if the user interacts. On expiry, redirects to login.
    Only runs on pages that have the .topbar element (i.e. logged-in pages).
-──────────────────────────────────────────────────────────────────────── */
+ */
 (function() {
     if (!document.querySelector) return;
 
@@ -94,10 +93,9 @@
     window.resetTimers = resetTimers;
 })();
 
-/* ── GLOBAL DOUBLE-CLICK / DOUBLE-SUBMIT PROTECTION ──────────────────────
+/*  GLOBAL DOUBLE-CLICK / DOUBLE-SUBMIT PROTECTION 
    Prevents any button or form from firing twice due to slow responses.
-   Applied to every page automatically via theme.js.
-──────────────────────────────────────────────────────────────────────── */
+   Applied to every page automatically via theme.js. */
 (function() {
     // Track in-flight AJAX fetch calls by URL
     var _inflight = {};

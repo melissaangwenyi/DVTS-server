@@ -221,7 +221,7 @@
 <script>
 var SESSION_GUARD_ID = "{{ session.get('guard_id') }}";
 
-/* ── TOAST ── */
+/*  TOAST */
 function showToast(msg, type) {
     var t = document.getElementById('toast');
     t.textContent = msg;
@@ -230,7 +230,7 @@ function showToast(msg, type) {
     setTimeout(function(){ t.classList.remove('show'); }, 3000);
 }
 
-/* ── MODAL ── */
+/*  MODAL  */
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
 
@@ -238,7 +238,7 @@ document.querySelectorAll('.modal-overlay').forEach(function(el) {
     el.addEventListener('click', function(e) { if (e.target === this) this.style.display = 'none'; });
 });
 
-/* ── VALIDATION ── */
+/*  VALIDATION  */
 function enforceUsername(el) {
     var c = el.value.replace(/[^a-zA-Z0-9_]/g, '');
     if (el.value !== c) el.value = c;
@@ -248,7 +248,7 @@ function enforceLetters(el) {
     if (el.value !== c) el.value = c;
 }
 
-/* ── EVENT DELEGATION ── */
+/*  EVENT DELEGATION  */
 document.addEventListener('click', function(e) {
     var btn = e.target.closest('.toggle-guard-btn');
     if (btn) {
@@ -262,7 +262,7 @@ document.addEventListener('click', function(e) {
                                     editBtn.dataset.fullname, editBtn.dataset.role);
 });
 
-/* ── TOGGLE GUARD ── */
+/*  TOGGLE GUARD  */
 function toggleGuard(id, isActive, btn) {
     var action = isActive ? 'Deactivate' : 'Activate';
     if (!confirm(action + ' this guard. Are you sure?')) return;
@@ -288,7 +288,7 @@ function toggleGuard(id, isActive, btn) {
     .catch(function(){ btn.disabled = false; btn.style.opacity = ''; showToast('Request failed.', 'error'); });
 }
 
-/* ── EDIT GUARD ── */
+/*  EDIT GUARD  */
 function openEditGuardModal(id, username, fullname, role) {
     document.getElementById('eg_id').value       = id;
     document.getElementById('eg_username').value = username;
@@ -329,7 +329,7 @@ function saveGuardEdit() {
     .catch(function(){ showToast('Request failed.', 'error'); });
 }
 
-/* ── RESET PASSWORD ── */
+/*  RESET PASSWORD  */
 function openResetModal(id, username) {
     document.getElementById('reset-guard-id').value = id;
     document.getElementById('reset-sub').textContent = 'Guard: ' + username;
@@ -359,7 +359,7 @@ function savePasswordReset() {
     .catch(function(){ showToast('Request failed.', 'error'); });
 }
 
-/* ── ADD GUARD ── */
+/*  ADD GUARD  */
 function addGuard() {
     var username  = document.getElementById('ag_username').value.trim();
     var full_name = document.getElementById('ag_fullname').value.trim();
